@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
-import { YoutubeTranscript } from "youtube-transcript-api";
+import { exec } from "child_process";
+import { promisify } from "util";
+import path from "path";
+
+const execPromise = promisify(exec);
 
 // Function to extract video ID from YouTube URL
 function extractVideoId(url: string): string | null {
@@ -58,85 +62,49 @@ async function fetchYouTubeTranscript(
   try {
     console.log(`Fetching transcript for video ID: ${videoId}`);
 
-    // Try to get the actual transcript using youtube-transcript package
+    // Try to get the transcript using Python script
     try {
-      const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+      // Get the absolute path to the Python script
+      const scriptPath = path.resolve(
+        process.cwd(),
+        "src/scripts/youtube_transcript.py"
+      );
 
-      if (transcript && transcript.length > 0) {
+      // Run the Python script with the video ID as an argument
+      const { stdout, stderr } = await execPromise(
+        `python ${scriptPath} ${videoId}`
+      );
+
+      if (stderr) {
+        console.error(`Python script error: ${stderr}`);
+      }
+
+      // Parse the JSON output from the Python script
+      const result = JSON.parse(stdout);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (result.segments && result.segments.length > 0) {
         console.log(
-          `Successfully fetched ${transcript.length} transcript segments`
+          `Successfully fetched ${result.segments.length} transcript segments`
         );
 
-        // Convert to dialogue segments
-        const segments: DialogueSegment[] = [];
-        let currentSpeaker = "Speaker A";
-        let currentSegmentIndex = 0;
+        // Add IDs to the segments
+        const segments = result.segments.map((segment: any) => ({
+          ...segment,
+          id: uuidv4(),
+          vocabularyItems: [],
+        }));
 
-        // Group transcript items into meaningful segments (combine items that are close together)
-        const groupedTranscript = [];
-        let currentGroup = {
-          text: transcript[0].text,
-          start: transcript[0].offset / 1000,
-          duration: transcript[0].duration / 1000,
-        };
-
-        for (let i = 1; i < transcript.length; i++) {
-          const item = transcript[i];
-          const prevItem = transcript[i - 1];
-          const timeDiff =
-            (item.offset - (prevItem.offset + prevItem.duration)) / 1000;
-
-          // If time difference is small, combine with current group
-          if (timeDiff < 1.5) {
-            currentGroup.text += " " + item.text;
-            currentGroup.duration += item.duration / 1000;
-          } else {
-            // Otherwise, start a new group
-            groupedTranscript.push(currentGroup);
-            currentGroup = {
-              text: item.text,
-              start: item.offset / 1000,
-              duration: item.duration / 1000,
-            };
-          }
-        }
-
-        // Add the last group
-        groupedTranscript.push(currentGroup);
-
-        // Create segments from grouped transcript
-        for (let i = 0; i < groupedTranscript.length; i++) {
-          const group = groupedTranscript[i];
-
-          // Switch speakers every 1-2 segments to simulate conversation
-          if (i > 0 && i % 2 === 0) {
-            currentSpeaker =
-              currentSpeaker === "Speaker A" ? "Speaker B" : "Speaker A";
-          }
-
-          segments.push({
-            id: uuidv4(),
-            speakerName: currentSpeaker,
-            text: group.text,
-            startTime: group.start,
-            endTime: group.start + group.duration,
-            vocabularyItems: [],
-          });
-        }
-
-        console.log(
-          `Created ${segments.length} dialogue segments from transcript`
-        );
         return segments;
       }
     } catch (error) {
-      console.error(
-        "Error fetching transcript with youtube-transcript:",
-        error
-      );
+      console.error("Error fetching transcript with Python script:", error);
     }
 
-    // If youtube-transcript fails, try YouTube Data API
+    // If Python script fails, try YouTube Data API
     try {
       // Get video details including captions
       const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM`;
