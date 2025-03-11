@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
-import { exec } from "child_process";
-import { promisify } from "util";
-import path from "path";
-
-const execPromise = promisify(exec);
 
 // Function to extract video ID from YouTube URL
 function extractVideoId(url: string): string | null {
@@ -38,8 +33,7 @@ function convertToEmbedUrl(url: string): string {
 
 async function fetchVideoMetadata(videoId: string) {
   try {
-    // Use YouTube API to fetch video metadata
-    // For demo purposes, we'll use oEmbed API which doesn't require an API key
+    // Use YouTube oEmbed API to fetch video metadata (doesn't require API key)
     const response = await fetch(
       `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
     );
@@ -56,173 +50,11 @@ async function fetchVideoMetadata(videoId: string) {
   }
 }
 
-async function fetchYouTubeTranscript(
-  videoId: string
-): Promise<DialogueSegment[]> {
-  try {
-    console.log(`Fetching transcript for video ID: ${videoId}`);
-
-    // Try to get the transcript using Python script
-    try {
-      // Get the absolute path to the Python script
-      const scriptPath = path.resolve(
-        process.cwd(),
-        "src/scripts/youtube_transcript.py"
-      );
-
-      // Run the Python script with the video ID as an argument
-      const { stdout, stderr } = await execPromise(
-        `python ${scriptPath} ${videoId}`
-      );
-
-      if (stderr) {
-        console.error(`Python script error: ${stderr}`);
-      }
-
-      // Parse the JSON output from the Python script
-      const result = JSON.parse(stdout);
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      if (result.segments && result.segments.length > 0) {
-        console.log(
-          `Successfully fetched ${result.segments.length} transcript segments`
-        );
-
-        // Add IDs to the segments
-        const segments = result.segments.map((segment: any) => ({
-          ...segment,
-          id: uuidv4(),
-          vocabularyItems: [],
-        }));
-
-        return segments;
-      }
-    } catch (error) {
-      console.error("Error fetching transcript with Python script:", error);
-    }
-
-    // If Python script fails, try YouTube Data API
-    try {
-      // Get video details including captions
-      const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM`;
-      const videoResponse = await fetch(videoDetailsUrl);
-
-      if (videoResponse.ok) {
-        const videoData = await videoResponse.json();
-
-        if (videoData && videoData.items && videoData.items.length > 0) {
-          const videoDetails = videoData.items[0];
-          const title = videoDetails.snippet.title || "";
-          const description = videoDetails.snippet.description || "";
-
-          console.log(`Video title: ${title}`);
-          console.log(
-            `Video description preview: ${description.substring(0, 100)}...`
-          );
-
-          // Try to extract meaningful sentences from the description
-          if (description) {
-            const sentences = description
-              .split(/[.!?]+/)
-              .map((s) => s.trim())
-              .filter((s) => s.length > 5 && s.length < 200);
-
-            if (sentences.length > 3) {
-              console.log(
-                `Created ${sentences.length} segments from video description`
-              );
-              return createSegmentsFromSentences(sentences);
-            }
-          }
-
-          // If we can't get good sentences from description, try the title
-          if (title) {
-            // Use the title as the first segment
-            const segments: DialogueSegment[] = [];
-            segments.push({
-              id: uuidv4(),
-              speakerName: "Speaker A",
-              text: title,
-              startTime: 0,
-              endTime: 5,
-              vocabularyItems: [],
-            });
-
-            // Add some generic follow-up segments related to the title
-            const followUpSentences = [
-              `Let's talk about ${title}.`,
-              `This video covers important information about ${title}.`,
-              `I find ${title} to be a fascinating topic.`,
-              `What do you think about ${title}?`,
-              `There's a lot to learn about ${title}.`,
-            ];
-
-            for (let i = 0; i < followUpSentences.length; i++) {
-              segments.push({
-                id: uuidv4(),
-                speakerName: i % 2 === 0 ? "Speaker B" : "Speaker A",
-                text: followUpSentences[i],
-                startTime: (i + 1) * 5,
-                endTime: (i + 2) * 5,
-                vocabularyItems: [],
-              });
-            }
-
-            console.log(
-              `Created ${segments.length} segments based on video title`
-            );
-            return segments;
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching from YouTube Data API:", error);
-    }
-
-    // If all else fails, create default segments
-    console.log("All transcript methods failed, creating default segments");
-    return createDefaultSegments(videoId);
-  } catch (error) {
-    console.error("Error in fetchYouTubeTranscript:", error);
-    return createDefaultSegments(videoId);
-  }
-}
-
-// Create segments from sentences
-function createSegmentsFromSentences(sentences: string[]): DialogueSegment[] {
-  const segments: DialogueSegment[] = [];
-  const segmentDuration = 5; // 5 seconds per segment
-
-  let currentSpeaker = "Speaker A";
-
-  for (let i = 0; i < sentences.length; i++) {
-    const startTime = i * segmentDuration;
-    const endTime = (i + 1) * segmentDuration;
-
-    // Switch speakers occasionally to simulate conversation
-    if (i > 0 && i % 2 === 0) {
-      currentSpeaker =
-        currentSpeaker === "Speaker A" ? "Speaker B" : "Speaker A";
-    }
-
-    segments.push({
-      id: uuidv4(),
-      speakerName: currentSpeaker,
-      text: sentences[i],
-      startTime,
-      endTime,
-      vocabularyItems: [],
-    });
-  }
-
-  return segments;
-}
-
 // Create default segments for any video
-function createDefaultSegments(videoId: string): DialogueSegment[] {
+function createDefaultSegments(
+  videoId: string,
+  title: string = ""
+): DialogueSegment[] {
   console.log("Creating default segments for video:", videoId);
 
   // Create 10 segments of 5 seconds each (50 seconds total)
@@ -230,18 +62,35 @@ function createDefaultSegments(videoId: string): DialogueSegment[] {
   const segmentDuration = 5;
   const numberOfSegments = 10;
 
-  const sentences = [
-    "Hello, welcome to this video.",
-    "Today we're going to discuss an interesting topic.",
-    "I hope you find this information useful.",
-    "Let me know what you think in the comments.",
-    "This is an important point to understand.",
-    "Let's break this down step by step.",
-    "First, we need to consider the context.",
-    "Second, we should analyze the details.",
-    "Finally, we can draw some conclusions.",
-    "Thank you for watching this video.",
-  ];
+  // Use title-based sentences if available
+  let sentences = [];
+  if (title) {
+    sentences = [
+      `Hello, welcome to this video about ${title}.`,
+      `Today we're going to discuss ${title} in detail.`,
+      `${title} is an interesting topic that many people find useful.`,
+      `Let me know what you think about ${title} in the comments.`,
+      `Understanding ${title} is important for several reasons.`,
+      `Let's break down ${title} step by step.`,
+      `First, we need to consider the context of ${title}.`,
+      `Second, we should analyze the details of ${title}.`,
+      `Finally, we can draw some conclusions about ${title}.`,
+      `Thank you for watching this video about ${title}.`,
+    ];
+  } else {
+    sentences = [
+      "Hello, welcome to this video.",
+      "Today we're going to discuss an interesting topic.",
+      "I hope you find this information useful.",
+      "Let me know what you think in the comments.",
+      "This is an important point to understand.",
+      "Let's break this down step by step.",
+      "First, we need to consider the context.",
+      "Second, we should analyze the details.",
+      "Finally, we can draw some conclusions.",
+      "Thank you for watching this video.",
+    ];
+  }
 
   for (let i = 0; i < numberOfSegments; i++) {
     const startTime = i * segmentDuration;
@@ -282,10 +131,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const [metadata, segments] = await Promise.all([
-      fetchVideoMetadata(videoId),
-      fetchYouTubeTranscript(videoId),
-    ]);
+    // Fetch metadata
+    const metadata = await fetchVideoMetadata(videoId);
+
+    // Create default segments based on the video title
+    const segments = createDefaultSegments(videoId, metadata.title);
 
     // Extract topic tags from title
     const words = metadata.title.split(" ");
@@ -294,7 +144,7 @@ export async function GET(request: Request) {
       .slice(0, 3)
       .map((word: string) => word.toLowerCase().replace(/[^a-z0-9]/g, ""));
 
-    // Determine level based on random selection (in a real app, this would use NLP)
+    // Determine level based on random selection
     const levels = ["beginner", "intermediate", "advanced"];
     const level = levels[Math.floor(Math.random() * levels.length)];
 
