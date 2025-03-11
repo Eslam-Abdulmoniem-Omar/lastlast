@@ -1,58 +1,45 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useDeepgram } from '../lib/contexts/DeepgramContext';
-import { addDocument } from '../lib/firebase/firebaseUtils';
-import { motion } from 'framer-motion';
+import { useState } from "react";
+import { addDocument } from "../lib/firebase/firebaseUtils";
+import SpeechRecorder from "./SpeechRecorder";
 
 export default function VoiceRecorder() {
   const [isRecording, setIsRecording] = useState(false);
-  const { connectToDeepgram, disconnectFromDeepgram, connectionState, realtimeTranscript } = useDeepgram();
+  const [transcript, setTranscript] = useState("");
 
-  const handleStartRecording = async () => {
-    await connectToDeepgram();
-    setIsRecording(true);
+  const handleTranscriptChange = (newTranscript: string) => {
+    setTranscript(newTranscript);
   };
 
-  const handleStopRecording = async () => {
-    disconnectFromDeepgram();
-    setIsRecording(false);
-    
-    // Save the note to Firebase
-    if (realtimeTranscript) {
-      await addDocument('notes', {
-        text: realtimeTranscript,
-        timestamp: new Date().toISOString(),
-      });
+  const handleRecordingStateChange = async (recording: boolean) => {
+    setIsRecording(recording);
+
+    // When recording stops, save the note to Firebase if we have a transcript
+    if (!recording && transcript && transcript.trim() !== "") {
+      try {
+        await addDocument("notes", {
+          text: transcript,
+          timestamp: new Date().toISOString(),
+        });
+        console.log("Successfully saved transcript to Firebase");
+      } catch (error) {
+        console.error("Error saving transcript to Firebase:", error);
+      }
     }
   };
 
   return (
     <div className="w-full max-w-md">
-      <button
-        onClick={isRecording ? handleStopRecording : handleStartRecording}
-        className={`w-full py-2 px-4 rounded-full ${
-          isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
-        } text-white font-bold`}
-      >
-        {isRecording ? 'Stop Recording' : 'Start Recording'}
-      </button>
-      {isRecording && (
-        <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-          <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
-            }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-            className="w-8 h-8 bg-blue-500 rounded-full mx-auto mb-4"
-          />
-          <p className="text-sm text-gray-600">{realtimeTranscript}</p>
-        </div>
-      )}
+      <SpeechRecorder
+        onTranscriptChange={handleTranscriptChange}
+        onRecordingStateChange={handleRecordingStateChange}
+        buttonStyle="pill"
+        showTranscript={true}
+        showModelInfo={true}
+        showDetailedConfig={true}
+        maxRecordingTime={30000} // 30 seconds max recording time
+      />
     </div>
   );
 }
