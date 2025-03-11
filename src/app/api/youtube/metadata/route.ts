@@ -223,6 +223,36 @@ async function fetchYouTubeTranscript(
   }
 }
 
+// Create segments from sentences
+function createSegmentsFromSentences(sentences: string[]): DialogueSegment[] {
+  const segments: DialogueSegment[] = [];
+  const segmentDuration = 5; // 5 seconds per segment
+
+  let currentSpeaker = "Speaker A";
+
+  for (let i = 0; i < sentences.length; i++) {
+    const startTime = i * segmentDuration;
+    const endTime = (i + 1) * segmentDuration;
+
+    // Switch speakers occasionally to simulate conversation
+    if (i > 0 && i % 2 === 0) {
+      currentSpeaker =
+        currentSpeaker === "Speaker A" ? "Speaker B" : "Speaker A";
+    }
+
+    segments.push({
+      id: uuidv4(),
+      speakerName: currentSpeaker,
+      text: sentences[i],
+      startTime,
+      endTime,
+      vocabularyItems: [],
+    });
+  }
+
+  return segments;
+}
+
 // Create default segments for any video
 function createDefaultSegments(videoId: string): DialogueSegment[] {
   console.log("Creating default segments for video:", videoId);
