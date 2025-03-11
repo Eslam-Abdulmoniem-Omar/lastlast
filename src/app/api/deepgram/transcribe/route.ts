@@ -4,15 +4,9 @@ import * as deepgram from "@deepgram/sdk";
 // Set dynamic so the route is not statically optimized by Next.js
 export const dynamic = "force-dynamic";
 
-// Configure the API to handle larger file uploads
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "10mb",
-    },
-    responseLimit: false,
-  },
-};
+// Configure the route segment to handle larger files
+export const runtime = "nodejs";
+export const maxDuration = 60; // Set max duration in seconds that matches your needs
 
 // Return a secure transcription response
 const getSecureFallbackResponse = (

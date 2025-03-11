@@ -9,6 +9,10 @@ import { v4 as uuidv4 } from "uuid";
 // Set dynamic so the route is not statically optimized by Next.js
 export const dynamic = "force-dynamic";
 
+// Configure for handling audio files
+export const runtime = "nodejs";
+export const maxDuration = 60; // 60 seconds max duration
+
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
