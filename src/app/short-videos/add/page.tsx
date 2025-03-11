@@ -451,30 +451,24 @@ export default function AddYouTubeShortPage() {
     }
   };
 
+  // Add this at the component level, not inside a condition
   useEffect(() => {
     const handleUrlFromQuery = async () => {
       // Check for URL in query parameters
-      const searchParams = new URLSearchParams(window.location.search);
-      const urlFromQuery = searchParams.get("url");
+      if (typeof window !== "undefined") {
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlFromQuery = searchParams.get("url");
 
-      if (urlFromQuery && validateYoutubeUrl(urlFromQuery)) {
-        setYoutubeUrl(urlFromQuery);
-        setIsAutoSubmitMode(true);
-
-        // Use the fetchTranscript function to get segments
-        await fetchTranscript(urlFromQuery);
-
-        // Auto-submit after a short delay to allow user to see what's being submitted
-        if (user) {
-          setTimeout(() => {
-            handleSubmit({ preventDefault: () => {} } as React.FormEvent);
-          }, 3000);
+        if (urlFromQuery && validateYoutubeUrl(urlFromQuery)) {
+          setYoutubeUrl(urlFromQuery);
+          await fetchTranscript(urlFromQuery);
+          handleSubmit(new Event("submit") as unknown as React.FormEvent);
         }
       }
     };
 
     handleUrlFromQuery();
-  }, [user, router, isAutoSubmitMode]); // Added isAutoSubmitMode to dependencies
+  }, []); // Empty dependency array
 
   const addTopic = () => {
     if (newTopic.trim() && !topics.includes(newTopic.trim())) {

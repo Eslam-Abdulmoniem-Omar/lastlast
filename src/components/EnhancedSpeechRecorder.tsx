@@ -152,7 +152,7 @@ export default function EnhancedSpeechRecorder({
       setIsProcessing(true);
 
       // Use Web Speech API for transcription
-      const transcript = await useWebSpeechAPI(audioBlob);
+      const transcript = await webSpeechAPI(audioBlob);
 
       if (!transcript) {
         throw new Error("No transcription generated");
@@ -166,14 +166,14 @@ export default function EnhancedSpeechRecorder({
       }
     } catch (error) {
       console.error("Error processing recording:", error);
-      setError("Failed to process speech. Please try again.");
+      setError("Failed to process recording. Please try again.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Use Web Speech API for transcription
-  const useWebSpeechAPI = (audioBlob: Blob): Promise<string> => {
+  // Renamed from useWebSpeechAPI to webSpeechAPI since it's not a hook
+  const webSpeechAPI = (audioBlob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
       // Check if Web Speech API is supported
       if (
