@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
-import { exec } from "child_process";
-import { promisify } from "util";
-import path from "path";
-
-const execPromise = promisify(exec);
 
 // Function to extract video ID from YouTube URL
 export function extractVideoId(url: string): string | null {
@@ -27,47 +22,76 @@ export function extractVideoId(url: string): string | null {
   return null;
 }
 
-// Function to run the Python script and get the transcript
-async function getPythonTranscript(videoId: string): Promise<any> {
-  try {
-    console.log(`Running Python script for video ID: ${videoId}`);
+// Function to create static dialogue segments
+function createStaticSegments(): DialogueSegment[] {
+  const segments: DialogueSegment[] = [
+    {
+      id: uuidv4(),
+      speakerName: "Speaker A",
+      text: "Hello! How are you doing today?",
+      startTime: 0,
+      endTime: 5,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker B",
+      text: "I'm doing well, thank you. How about you?",
+      startTime: 5,
+      endTime: 10,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker A",
+      text: "I'm great! I've been learning English for a few months now.",
+      startTime: 10,
+      endTime: 15,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker B",
+      text: "That's wonderful! Your English sounds very good already.",
+      startTime: 15,
+      endTime: 20,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker A",
+      text: "Thank you! I practice every day. It's challenging but rewarding.",
+      startTime: 20,
+      endTime: 25,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker B",
+      text: "Consistency is key when learning a new language. What resources do you use?",
+      startTime: 25,
+      endTime: 30,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker A",
+      text: "I use apps, watch videos, and try to speak with native speakers whenever possible.",
+      startTime: 30,
+      endTime: 35,
+      vocabularyItems: [],
+    },
+    {
+      id: uuidv4(),
+      speakerName: "Speaker B",
+      text: "That's a great approach. Immersion is one of the best ways to learn quickly.",
+      startTime: 35,
+      endTime: 40,
+      vocabularyItems: [],
+    },
+  ];
 
-    // Get the absolute path to the Python script
-    const scriptPath = path.resolve(
-      process.cwd(),
-      "src/scripts/youtube_transcript.py"
-    );
-
-    // Run the Python script with the video ID as an argument
-    const { stdout, stderr } = await execPromise(
-      `python ${scriptPath} ${videoId}`
-    );
-
-    if (stderr) {
-      console.error(`Python script error: ${stderr}`);
-      throw new Error(`Python script error: ${stderr}`);
-    }
-
-    // Parse the JSON output from the Python script
-    const result = JSON.parse(stdout);
-
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
-    return result;
-  } catch (error) {
-    console.error("Error running Python script:", error);
-    throw error;
-  }
-}
-
-// Add IDs to the segments
-function addIdsToSegments(segments: any[]): DialogueSegment[] {
-  return segments.map((segment) => ({
-    ...segment,
-    id: uuidv4(),
-  }));
+  return segments;
 }
 
 export async function GET(request: Request) {
@@ -93,21 +117,18 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get the transcript using the Python script
-    const result = await getPythonTranscript(videoId);
-
-    // Add IDs to the segments
-    const segments = addIdsToSegments(result.segments);
+    // Get static segments
+    const segments = createStaticSegments();
 
     // Return the segments
     return NextResponse.json({
       data: {
         segments,
-        source: "python-transcript-api",
+        source: "static-transcript-api",
       },
     });
   } catch (error: any) {
-    console.error("Error in Python transcript API:", error);
+    console.error("Error in transcript API:", error);
 
     return NextResponse.json(
       {
