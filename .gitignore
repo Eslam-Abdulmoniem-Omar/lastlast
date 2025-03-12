@@ -5,6 +5,7 @@
 /.pnp
 .pnp.js
 .yarn/install-state.gz
+/temp-deploy/node_modules/
 
 # testing
 /coverage
@@ -34,8 +35,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# temp deploy folder
-/temp-deploy/node_modules
 
 .env
