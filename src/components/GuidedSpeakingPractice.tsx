@@ -9,7 +9,6 @@ import {
   Play,
   ArrowRight,
   StopCircle,
-  Headphones,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDeepgram } from "@/lib/contexts/DeepgramContext";
@@ -72,7 +71,7 @@ export default function GuidedSpeakingPractice({
   // Handle Deepgram errors
   useEffect(() => {
     if (deepgramError) {
-      // log removed
+      console.error("Deepgram error:", deepgramError);
       setRecordingError(deepgramError);
       setIsRecording(false);
       setWaitingForSpeech(true);
@@ -99,37 +98,35 @@ export default function GuidedSpeakingPractice({
         recordingTimerRef.current = null;
       }
 
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
 
-      if (autoPlayTimeoutRef.current) {
-        clearTimeout(autoPlayTimeoutRef.current);
-        autoPlayTimeoutRef.current = null;
-      }
+    if (autoPlayTimeoutRef.current) {
+      clearTimeout(autoPlayTimeoutRef.current);
+      autoPlayTimeoutRef.current = null;
+    }
 
-      if (autoStartRecordingRef.current) {
-        clearTimeout(autoStartRecordingRef.current);
-        autoStartRecordingRef.current = null;
-      }
-    };
+    if (autoStartRecordingRef.current) {
+      clearTimeout(autoStartRecordingRef.current);
+      autoStartRecordingRef.current = null;
+    }
+  };
   }, []);
 
   // Start recording function using native MediaRecorder
   const startRecording = async () => {
-    if (mediaRecorderRef.current && !isRecording) {
-      // Reset the transcript, waiting state and errors
-      setTranscript("");
-      setResult(null);
-      setWaitingForSpeech(true);
+    try {
+      // Reset recording state
       setRecordingError(null);
+      setIsRecording(false);
       setIsProcessing(false);
       audioChunksRef.current = [];
 
-      try {
-        // Request microphone access
-        const stream = await navigator.mediaDevices.getUserMedia({
+      // Request microphone access
+      console.log("Requesting microphone access...");
+      const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -137,171 +134,126 @@ export default function GuidedSpeakingPractice({
           },
         });
 
-        // Store the stream reference
-        mediaStreamRef.current = stream;
+      // Store the stream reference
+      mediaStreamRef.current = stream;
 
-        // Create MediaRecorder
-        let recorder;
-        try {
-          // Check if the browser supports the specified MIME type
-          const mimeType = "audio/webm;codecs=opus";
-          if (MediaRecorder.isTypeSupported(mimeType)) {
-            recorder = new MediaRecorder(stream, { mimeType });
-          } else {
-            // log removed
-            recorder = new MediaRecorder(stream);
-          }
-        } catch (e) {
-          // log removed
+      // Create MediaRecorder
+      let recorder;
+      try {
+        // Check if the browser supports the specified MIME type
+        const mimeType = "audio/webm;codecs=opus";
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+          recorder = new MediaRecorder(stream, { mimeType });
+            } else {
+          console.warn("Opus codec not supported, falling back to default");
           recorder = new MediaRecorder(stream);
         }
-
-        // Store the recorder reference
-        mediaRecorderRef.current = recorder;
-
-        // Set up data handling
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        // Handle recording stop
-        recorder.onstop = async () => {
-          // MediaRecorder stopped
-          setIsRecording(false);
-          setIsProcessing(true); // Show processing indicator
-          setHasRecordedOnce(true); // Mark that we've recorded once
-
-          // Process the recorded audio
-          if (audioChunksRef.current.length > 0) {
-            const audioBlob = new Blob(audioChunksRef.current, {
-              type: "audio/webm",
-            });
-            await processAudioBlob(audioBlob);
-          } else {
-            // log removed
-            setWaitingForSpeech(true);
-            setIsProcessing(false);
-          }
-
-          // Clean up
-          stopMediaTracks();
-        };
-
-        // Handle recording errors
-        recorder.onerror = (event) => {
-          // log removed
-          setRecordingError("Recording error occurred. Please try again.");
-          setIsRecording(false);
-          setIsProcessing(false);
-          stopMediaTracks();
-        };
-
-        // Start recording
-        recorder.start(100); // Get data every 100ms to monitor speech activity
-        setIsRecording(true);
-        setRecordingTimeLeft(15); // Max recording time: 15 seconds
-        // Recording started
-
-        // Set up a hidden countdown timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
-        // Create an audio analyzer to detect silence
-        const audioContext = new AudioContext();
-        const analyser = audioContext.createAnalyser();
-        const microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-        analyser.fftSize = 256;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-
-        let silenceStart: number | null = null;
-        const SILENCE_THRESHOLD = 10; // Adjust based on testing
-        const SILENCE_DURATION = 1500; // 1.5 seconds of silence before stopping
-
-        const startTime = Date.now();
-        timerIntervalRef.current = setInterval(() => {
-          // Update the hidden countdown
-          const elapsed = Date.now() - startTime;
-          const remaining = Math.max(0, 15 - Math.floor(elapsed / 1000));
-          setRecordingTimeLeft(remaining);
-
-          // Check for silence (speech ended)
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            sum += dataArray[i];
-          }
-          const average = sum / bufferLength;
-
-          // If below threshold, mark as silence
-          if (average < SILENCE_THRESHOLD) {
-            if (!silenceStart) {
-              silenceStart = Date.now();
-            } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-              // If silence lasts for the duration, stop recording
-              // Speech ended (silence detected), stopping recording
-              if (timerIntervalRef.current) {
-                clearInterval(timerIntervalRef.current);
-                timerIntervalRef.current = null;
-              }
-              stopRecording();
-              return;
-            }
-          } else {
-            // Reset silence start if sound detected
-            silenceStart = null;
-          }
-
-          // Stop if max time reached
-          if (remaining <= 0) {
-            // Max recording time reached
-            if (timerIntervalRef.current) {
-              clearInterval(timerIntervalRef.current);
-              timerIntervalRef.current = null;
-            }
-            stopRecording();
-          }
-        }, 100);
-
-        // Set maximum recording time as backup
-        if (recordingTimerRef.current) {
-          clearTimeout(recordingTimerRef.current);
-          recordingTimerRef.current = null;
-        }
-
-        recordingTimerRef.current = setTimeout(() => {
-          // Max recording time reached
-          stopRecording();
-          recordingTimerRef.current = null;
-        }, 15000); // 15 seconds maximum
-      } catch (error) {
-        // log removed
-        setRecordingError(
-          "Could not access microphone. Please check your browser permissions."
+      } catch (e) {
+        console.error(
+          "Error creating MediaRecorder, falling back to default:",
+          e
         );
+        recorder = new MediaRecorder(stream);
+      }
+
+      // Store the recorder reference
+      mediaRecorderRef.current = recorder;
+
+      // Set up data handling
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      // Handle recording stop
+      recorder.onstop = async () => {
+        console.log("MediaRecorder stopped");
+        setIsRecording(false);
+        setIsProcessing(true); // Show processing indicator
+        setHasRecordedOnce(true); // Mark that we've recorded once
+
+        // Process the recorded audio
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: "audio/webm",
+          });
+          await processAudioBlob(audioBlob);
+        } else {
+          console.warn("No audio data captured");
+          setWaitingForSpeech(true);
+          setIsProcessing(false);
+        }
+
+        // Clean up
+        stopMediaTracks();
+      };
+
+      // Handle recording errors
+      recorder.onerror = (event) => {
+        console.error("MediaRecorder error:", event);
+        setRecordingError("Recording error occurred. Please try again.");
         setIsRecording(false);
         setIsProcessing(false);
         stopMediaTracks();
+      };
+
+      // Start recording
+      recorder.start();
+      setIsRecording(true);
+      setRecordingTimeLeft(4);
+      console.log("Recording started");
+
+      // Set up countdown timer
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
       }
+
+      const startTime = Date.now();
+      timerIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 4 - Math.floor(elapsed / 1000));
+        setRecordingTimeLeft(remaining);
+
+        if (remaining <= 0 && timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+        }
+      }, 100);
+
+      // Set timeout to stop recording after 4 seconds
+      if (recordingTimerRef.current) {
+        clearTimeout(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      recordingTimerRef.current = setTimeout(() => {
+          stopRecording();
+        recordingTimerRef.current = null;
+      }, 4000);
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      setRecordingError(
+        "Could not access microphone. Please check your browser permissions."
+      );
+      setIsRecording(false);
+      setIsProcessing(false);
+      stopMediaTracks();
     }
   };
 
   // Stop recording function
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-
-      // Stop all audio tracks in the media stream
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getAudioTracks().forEach((track) => {
-          track.stop();
-        });
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping MediaRecorder:", e);
+        setIsProcessing(false);
       }
     }
 
@@ -314,6 +266,8 @@ export default function GuidedSpeakingPractice({
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
+
+    setIsRecording(false);
   };
 
   // Clean up media tracks
@@ -323,7 +277,7 @@ export default function GuidedSpeakingPractice({
         try {
           track.stop();
         } catch (e) {
-          // log removed
+          console.error("Error stopping media track:", e);
         }
       });
       mediaStreamRef.current = null;
@@ -332,10 +286,10 @@ export default function GuidedSpeakingPractice({
     mediaRecorderRef.current = null;
   };
 
-  // Process audio blob using Deepgram API with enhanced speech quality check
+  // Process audio blob using Deepgram API
   const processAudioBlob = async (audioBlob: Blob) => {
     try {
-      // Processing audio blob: audioBlob.size bytes
+      console.log("Processing audio blob:", audioBlob.size, "bytes");
 
       // Create a FormData object to send the audio file
       const formData = new FormData();
@@ -356,63 +310,40 @@ export default function GuidedSpeakingPractice({
       const result = await response.json();
 
       if (result.transcript && result.transcript.trim() !== "") {
-        // Transcription result: result.transcript
+        console.log("Transcription result:", result.transcript);
         setTranscript(result.transcript);
 
         // Evaluate the transcript
         setWaitingForSpeech(false);
-        // Setting waitingForSpeech to false
+        console.log("Setting waitingForSpeech to false");
 
         if (simpleFeedback) {
-          // Enhanced check: If simple feedback mode but transcript is very short or empty, prompt retry
-          if (result.transcript.split(/\s+/).length < 2) {
-            // Too short transcript in simple mode, prompting retry
-            setResult("incorrect");
-            setCanProceed(false);
-          } else {
-            // In simple feedback mode with enough words, set result to correct
-            setResult("correct");
-            setCanProceed(true);
-          }
-        } else {
+          // In simple feedback mode, just set result to correct and allow proceeding
+          console.log("Simple feedback mode: setting result to correct");
+      setResult("correct");
+      setCanProceed(true);
+    } else {
           // In detailed feedback mode, evaluate the transcript
+          console.log("Detailed feedback mode: evaluating transcript");
           evaluateTranscript(result.transcript);
         }
+
+        // Force a re-render by setting a state
+    setIsProcessing(false);
       } else {
+        console.warn("No transcript returned from API");
+        setRecordingError(
+          "No speech detected. Click 'Try Again' to record again."
+        );
         setWaitingForSpeech(true);
-        setResult("incorrect");
-        setCanProceed(false);
       }
     } catch (error) {
-      setIsProcessing(false);
+      console.error("Error processing audio:", error);
+      setRecordingError("Error processing your speech. Please try again.");
       setWaitingForSpeech(true);
-      setRecordingError("Error processing audio. Please try again.");
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // Balanced sentence duration estimation - enough time to complete but not excessively long
-  const estimateSentenceDuration = (text: string): number => {
-    // Calculate based on both character count and word count
-    const words = text.split(/\s+/).length;
-    const characters = text.length;
-
-    // Use reasonable speaking rates
-    const wordBasedTime = words / 2.2; // Balanced rate (not too slow, not too fast)
-    const characterFactor = characters / 14; // Balanced rate
-
-    // Combine both metrics with modest buffer
-    const estimatedTime = Math.max(
-      (wordBasedTime + characterFactor) / 2 + 0.8, // Modest buffer
-      2.5 // Minimum 2.5 seconds
-    );
-
-    // Add small buffer (10%) for safety
-    const bufferedTime = estimatedTime * 1.1;
-
-    // Round to 1 decimal place
-    return parseFloat(bufferedTime.toFixed(1));
   };
 
   // Monitor current time to detect when to pause at the end of a sentence
@@ -423,8 +354,10 @@ export default function GuidedSpeakingPractice({
     if (typeof currentTime !== "number" || isNaN(currentTime)) return;
 
     // If we've reached the end time of the current sentence
-    // Use a small buffer (0.2s) to ensure the sentence completes
-    if (currentLine.endTime && currentTime >= currentLine.endTime + 0.2) {
+    if (currentLine.endTime && currentTime >= currentLine.endTime - 0.1) {
+      console.log(
+        `Auto-pausing at ${currentTime}, end time is ${currentLine.endTime}`
+      );
       onPauseVideo?.();
       setAutoPlaying(false);
       setWaitingForSpeech(true);
@@ -435,8 +368,11 @@ export default function GuidedSpeakingPractice({
   const startPractice = () => {
     if (!currentLine) return;
 
+    console.log("Starting practice for sentence:", currentLine.text);
+
     // If recording is active, stop it first
     if (isRecording) {
+      console.log("Recording is active, stopping it first");
       stopRecording();
       return;
     }
@@ -468,34 +404,28 @@ export default function GuidedSpeakingPractice({
 
     // Play the audio for the current sentence
     if (onSeekToTime && currentLine.startTime) {
-      // Use our enhanced seekToTime function
-      onSeekToTime(parseFloat(currentLine.startTime.toFixed(2)));
-
-      // Seeking to timestamp for practice
-
-      // Apply a small offset to make sure we catch the beginning of the line
-      const preciseStartTime = parseFloat(currentLine.startTime.toFixed(2));
-
-      // Use our enhanced seekToTime function
-      onSeekToTime(preciseStartTime);
-
-      // We don't need to call playVideo here as our improved seekToTime function handles it
+      console.log(`Seeking to ${currentLine.startTime}`);
+      onSeekToTime(currentLine.startTime);
+      onPlayVideo?.();
       setAutoPlaying(true);
 
-      // Estimate how long this sentence will take to play, with a more accurate calculation
+      // Estimate how long this sentence will take to play
       const estimatedDuration = estimateSentenceDuration(currentLine.text);
+      console.log(`Estimated duration: ${estimatedDuration}s`);
 
       // Set a timeout to pause after the estimated duration and prepare for recording
       autoPlayTimeoutRef.current = setTimeout(() => {
-        // Auto-pausing after estimated duration: 2.5s
+        console.log(
+          `Auto-pausing after estimated duration: ${estimatedDuration}s`
+        );
         onPauseVideo?.();
         setAutoPlaying(false);
         setWaitingForSpeech(true);
 
         // Start recording after a short delay to give user time to prepare
         autoStartRecordingRef.current = setTimeout(() => {
-          // Auto-starting recording after listening
-          startRecording();
+            console.log("Auto-starting recording after listening");
+            startRecording();
         }, 1500);
       }, estimatedDuration * 1000);
     } else {
@@ -506,6 +436,14 @@ export default function GuidedSpeakingPractice({
         startRecording();
       }, 1500);
     }
+  };
+
+  // Estimate how long a sentence will take to play based on word count
+  const estimateSentenceDuration = (text: string): number => {
+    // Average speaking rate is about 150 words per minute, or 2.5 words per second
+    const words = text.split(/\s+/).length;
+    // Add a small buffer to account for pauses and intonation
+    return Math.max(2, words / 2.5 + 0.5);
   };
 
   // Evaluate the transcript against the expected sentence
@@ -832,12 +770,12 @@ export default function GuidedSpeakingPractice({
       setCurrentLineIndex((prev) => {
         const nextIndex = prev + 1;
         // Start practice for the next sentence after a short delay
-        setTimeout(() => {
-          startPractice();
-        }, 500);
+      setTimeout(() => {
+        startPractice();
+      }, 500);
         return nextIndex;
       });
-    } else {
+        } else {
       // This is the last sentence, practice is complete
       console.log("Practice complete!");
 
@@ -872,19 +810,8 @@ export default function GuidedSpeakingPractice({
   ]);
 
   return (
-    <div className="bg-[#111f3d]/70 backdrop-blur-sm rounded-lg p-6 border border-[#2e3b56]/70 shadow-lg">
-      <h2 className="text-xl font-semibold mb-4 text-white">
-        Guided Speaking Practice
-      </h2>
-
-      {/* Headphones recommendation note */}
-      <div className="mb-4 p-3 bg-[#4d7efa]/10 border border-[#4d7efa]/20 rounded-lg flex items-start">
-        <Headphones className="text-[#4d7efa] h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-        <p className="text-sm text-white/80">
-          <span className="font-medium text-white">Tip:</span> For best
-          recording quality, use headphones with a microphone.
-        </p>
-      </div>
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h2 className="text-xl font-semibold mb-4">Guided Speaking Practice</h2>
 
       <div className="mb-6">
         <div className="flex items-center mb-2">
@@ -900,6 +827,39 @@ export default function GuidedSpeakingPractice({
                 }%`,
               }}
             ></div>
+          </div>
+        </div>
+
+        {/* Audio equipment recommendation note */}
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 pt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-blue-600"
+              >
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">
+                For the best experience:
+              </h3>
+              <p className="mt-1 text-sm text-blue-700">
+                Use headphones and a good microphone for better speech
+                recognition accuracy. Speak clearly and at a normal pace when
+                recording your response.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -939,21 +899,16 @@ export default function GuidedSpeakingPractice({
 
           {isRecording && (
             <div className="relative mb-4">
-              <div className="relative rounded-full h-20 w-20 flex items-center justify-center bg-[#e455c9]">
-                <motion.div
-                  animate={{ scale: [1, 1.3, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                  className="absolute inset-0 rounded-full bg-[#e455c9] opacity-50"
-                ></motion.div>
-                <Mic size={32} className="text-white" />
-              </div>
-              <button
-                onClick={stopRecording}
-                className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-[#1b2b48] text-white/80 p-2 rounded-full hover:bg-[#0c1527] transition-colors"
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+                className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center shadow-lg"
               >
-                <StopCircle size={20} />
-              </button>
-              {/* Timer is hidden but still active in the background */}
+                <Mic size={32} className="text-white" />
+              </motion.div>
+              <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 bg-white px-3 py-1 rounded-full shadow text-xs font-medium text-gray-700">
+                Recording... {recordingTimeLeft || 0}s
+              </div>
             </div>
           )}
 
@@ -989,18 +944,18 @@ export default function GuidedSpeakingPractice({
               {/* Only show Record Again button if there was a recording error or the user failed the evaluation */}
               {hasRecordedOnce &&
                 (result === "incorrect" || recordingError) && (
-                  <button
-                    onClick={() => {
-                      if (!isRecording) {
-                        startRecording();
-                      }
-                    }}
-                    className="mt-2 w-full py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-lg font-medium text-sm flex items-center justify-center"
-                  >
-                    <Mic size={16} className="mr-2" />
-                    Record Again
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    if (!isRecording) {
+                      startRecording();
+                    }
+                  }}
+                  className="mt-2 w-full py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-lg font-medium text-sm flex items-center justify-center"
+                >
+                  <Mic size={16} className="mr-2" />
+                  Record Again
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1030,23 +985,23 @@ export default function GuidedSpeakingPractice({
                 </p>
               </div>
             ) : simpleFeedback ? (
-              <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center">
                 {canProceed ? (
-                  <>
+                <>
                     <CheckCircle size={20} className="mr-2 text-green-500" />
                     <span className="font-medium text-green-700">
-                      Well done!
-                    </span>
-                  </>
-                ) : (
-                  <>
+                    Well done!
+                  </span>
+                </>
+              ) : (
+                <>
                     <XCircle size={20} className="mr-2 text-red-500" />
                     <span className="font-medium text-red-700">
                       Too many missing words. Please try again.
-                    </span>
-                  </>
-                )}
-              </div>
+                  </span>
+                </>
+              )}
+            </div>
             ) : (
               <>
                 {canProceed ? (
@@ -1055,14 +1010,14 @@ export default function GuidedSpeakingPractice({
                     <span className="font-medium text-green-700">
                       Well done! You can proceed to the next sentence.
                     </span>
-                  </div>
+                </div>
                 ) : (
                   <div className="flex items-center">
                     <XCircle size={20} className="mr-2 text-red-500" />
                     <span className="font-medium text-red-700">
                       Too many missing words. Please try again.
                     </span>
-                  </div>
+              </div>
                 )}
               </>
             )}

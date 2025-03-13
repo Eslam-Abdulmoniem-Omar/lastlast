@@ -1,134 +1,129 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useAuth } from "@/lib/hooks/useAuth";
-import { ArrowRight, FilePlus, Clock, BookOpen, User } from "lucide-react";
+import Image from "next/image";
+import { useAuth } from "../../lib/hooks/useAuth";
+import { Plus, Video, FileText, Upload } from "lucide-react";
+import ProtectedRoute from "../components/ProtectedRoute";
+import UserProfile from "../components/UserProfile";
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
+  );
+}
+
+function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
-    setMounted(true);
+    // Simulate loading to give time for authentication
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    // If not logged in and not loading, redirect to login
-    if (mounted && !loading && !user) {
-      router.push("/login");
-    }
-  }, [user, loading, router, mounted]);
-
-  // Loading state
-  if (loading || !mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c1527] to-[#111f3d]">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="w-16 h-16 bg-[#232323] rounded-xl mb-4 flex items-center justify-center">
-            <div className="w-12 h-12 bg-gray-700 animate-pulse rounded-lg"></div>
-          </div>
-          <div className="h-4 w-24 bg-gray-700 animate-pulse rounded mb-3"></div>
-          <div className="h-3 w-32 bg-gray-700/50 animate-pulse rounded"></div>
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header with padding for fixed navbar */}
+      <div className="pt-20 pb-6 bg-gradient-to-r from-indigo-600 to-purple-600 shadow-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h1 className="text-3xl font-bold text-white">
+            Welcome to Your Dashboard
+          </h1>
+          <p className="text-indigo-100 mt-2">
+            Manage your short videos and practice sessions
+          </p>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <main className="min-h-screen bg-gradient-to-b from-[#0c1527] to-[#111f3d] py-12 text-white">
-      <div className="container mx-auto px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center mb-8">
-            <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* User Profile Section */}
+          <div className="lg:col-span-1">
+            <UserProfile />
           </div>
 
-          {/* Welcome section */}
-          <div className="bg-[#1b2b48]/80 backdrop-blur-sm rounded-xl p-6 border border-[#2e3b56]/50 shadow-lg mb-8">
-            <div className="flex items-center mb-4">
-              {user?.photoURL ? (
-                <img
-                  src={user.photoURL}
-                  alt={user.displayName || "User"}
-                  className="w-12 h-12 rounded-full mr-4 border-2 border-secondary/30"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-secondary/20 flex items-center justify-center text-white mr-4">
-                  <User size={24} />
+          {/* Main Content */}
+          <div className="lg:col-span-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Short Videos Container */}
+              <Link
+                href="/short-videos"
+                className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow group"
+              >
+                <div className="p-8 flex flex-col items-center text-center h-full">
+                  <div className="bg-white/20 p-4 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+                    <Video className="h-10 w-10 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-3">
+                    Browse Short Videos
+                  </h3>
+                  <p className="text-blue-100 mb-6">
+                    View and practice with our library of short videos for
+                    language learning
+                  </p>
+                  <div className="mt-auto inline-flex items-center justify-center px-5 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white font-medium group-hover:bg-white/20 transition-colors">
+                    Browse Videos <FileText className="ml-2 h-4 w-4" />
+                  </div>
                 </div>
-              )}
-              <div>
-                <h2 className="text-xl font-bold">
-                  Welcome{user?.displayName ? `, ${user.displayName}` : ""}!
+              </Link>
+
+              {/* Add Short Videos Container */}
+              <Link
+                href="/short-videos/add"
+                className="bg-gradient-to-br from-purple-500 to-pink-600 text-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow group"
+              >
+                <div className="p-8 flex flex-col items-center text-center h-full">
+                  <div className="bg-white/20 p-4 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+                    <Upload className="h-10 w-10 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-3">Add New Video</h3>
+                  <p className="text-pink-100 mb-6">
+                    Upload and create new short videos for practice with
+                    AI-powered transcription
+                  </p>
+                  <div className="mt-auto inline-flex items-center justify-center px-5 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white font-medium group-hover:bg-white/20 transition-colors">
+                    Add Video <Plus className="ml-2 h-4 w-4" />
+                  </div>
+                </div>
+              </Link>
+            </div>
+
+            {/* Welcome message for new users */}
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+              </div>
+            ) : (
+              <div className="bg-white shadow-md rounded-xl p-6 border border-indigo-100">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  Getting Started
                 </h2>
-                <p className="text-gray-300">
-                  Ready to improve your English with YouTube videos?
+                <p className="text-gray-600 mb-4">
+                  Welcome to your dashboard! From here you can:
+                </p>
+                <ul className="list-disc list-inside text-gray-600 space-y-2 mb-4">
+                  <li>
+                    Browse our library of short videos for language practice
+                  </li>
+                  <li>Add your own videos with automatic transcription</li>
+                  <li>Track your learning progress</li>
+                </ul>
+                <p className="text-gray-600">
+                  Click on one of the cards above to get started!
                 </p>
               </div>
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <Link
-              href="/short-videos/add"
-              className="bg-[#1b2b48]/80 backdrop-blur-sm rounded-xl p-6 border border-[#2e3b56]/50 hover:bg-[#1b2b48] transition-colors hover:shadow-lg"
-            >
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center text-white">
-                  <FilePlus size={20} />
-                </div>
-                <h3 className="text-lg font-semibold ml-3">Add Video</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Add a new YouTube video to practice with
-              </p>
-              <div className="flex items-center text-secondary">
-                <span className="text-sm font-medium">Get Started</span>
-                <ArrowRight size={16} className="ml-2" />
-              </div>
-            </Link>
-
-            <Link
-              href="/short-videos"
-              className="bg-[#1b2b48]/80 backdrop-blur-sm rounded-xl p-6 border border-[#2e3b56]/50 hover:bg-[#1b2b48] transition-colors hover:shadow-lg"
-            >
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center text-white">
-                  <BookOpen size={20} />
-                </div>
-                <h3 className="text-lg font-semibold ml-3">My Videos</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Browse your saved videos and continue practice
-              </p>
-              <div className="flex items-center text-secondary">
-                <span className="text-sm font-medium">View Library</span>
-                <ArrowRight size={16} className="ml-2" />
-              </div>
-            </Link>
-          </div>
-
-          {/* Get started prompt */}
-          <div className="bg-gradient-to-r from-primary to-[#1a2242] rounded-xl p-6 shadow-lg">
-            <h2 className="text-xl font-bold mb-2">Start Practicing Now</h2>
-            <p className="text-gray-300 mb-4">
-              Find a YouTube short video and start improving your English skills
-              with real-world content.
-            </p>
-            <Link
-              href="/short-videos/add"
-              className="inline-flex items-center bg-secondary hover:bg-secondary-light text-white px-6 py-3 rounded-lg font-medium transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5"
-            >
-              Add YouTube Video
-              <ArrowRight size={18} className="ml-2" />
-            </Link>
+            )}
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

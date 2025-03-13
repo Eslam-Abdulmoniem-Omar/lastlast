@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 // Initialize the OpenAI client with the API key from .env.local
 const openaiApiKey = process.env.OPENAI_API_KEY || "";
+console.log("OpenAI API key available:", openaiApiKey ? "Yes" : "No");
 
 const openai = new OpenAI({
   apiKey: openaiApiKey,
@@ -14,9 +15,10 @@ const openai = new OpenAI({
 // Simple validation to check API key availability
 const isApiKeyConfigured = () => {
   if (!openaiApiKey) {
-    console.error("OpenAI API is not properly configured");
+    console.error("OPENAI_API_KEY is not configured in environment variables");
     return false;
   }
+  console.log("Using OpenAI API key with length:", openaiApiKey.length);
   return true;
 };
 
@@ -24,36 +26,19 @@ const isApiKeyConfigured = () => {
 const getFallbackTranslation = (
   text: string,
   context: string,
-  isFullSentence: boolean,
-  targetLanguage: string = "Arabic"
+  isFullSentence: boolean
 ) => {
   // If it's a full sentence, return a sentence translation with contextual elements
   if (isFullSentence) {
-    const fallbackTranslations: Record<string, string> = {
-      Arabic: "هذه ترجمة محلية للجملة.",
-      Spanish: "Esta es una traducción local de la oración.",
-      French: "Ceci est une traduction locale de la phrase.",
-      German: "Dies ist eine lokale Übersetzung des Satzes.",
-      Chinese: "这是句子的本地翻译。",
-      Japanese: "これは文の現地翻訳です。",
-    };
-
     return {
       original_text: text,
-      translation:
-        fallbackTranslations[targetLanguage] || fallbackTranslations["Arabic"],
+      translation: "هذه ترجمة محلية للجملة.",
       is_sentence: true,
       contextual_elements: [
         {
           element: "it's no use",
-          translation:
-            targetLanguage === "Arabic"
-              ? "لا فائدة منه"
-              : "no use (translation)",
-          explanation:
-            targetLanguage === "Arabic"
-              ? "تعبير يشير إلى عدم جدوى الأمر."
-              : "Expression indicating futility.",
+          translation: "لا فائدة منه",
+          explanation: "تعبير يشير إلى عدم جدوى الأمر.",
         },
       ],
     };
@@ -73,76 +58,59 @@ const getFallbackTranslation = (
       ? "gave " + text
       : text
     : text;
-
-  // Basic fallback translations for different languages
-  const fallbackTranslations: Record<string, any> = {
-    Arabic: {
-      translation: "ذهبت",
-      phrasal: "استمررت",
-      meaning: `كلمة '${text}' تعني بشكل عام 'يذهب'، ولكن في عبارة '${text} on' تعني 'تستمر' أو 'تواصل'.`,
-    },
-    Spanish: {
-      translation: "fue",
-      phrasal: "continuó",
-      meaning: `La palabra '${text}' generalmente significa 'ir', pero en la frase '${text} on' significa 'continuar'.`,
-    },
-    French: {
-      translation: "allé",
-      phrasal: "continué",
-      meaning: `Le mot '${text}' signifie généralement 'aller', mais dans l'expression '${text} on' signifie 'continuer'.`,
-    },
-    German: {
-      translation: "ging",
-      phrasal: "machte weiter",
-      meaning: `Das Wort '${text}' bedeutet im Allgemeinen 'gehen', aber in der Phrase '${text} on' bedeutet es 'weitermachen'.`,
-    },
-    Chinese: {
-      translation: "去了",
-      phrasal: "继续",
-      meaning: `'${text}' 这个词通常表示"去"，但在短语 '${text} on' 中表示"继续"。`,
-    },
-    Japanese: {
-      translation: "行った",
-      phrasal: "続けた",
-      meaning: `'${text}' という単語は一般的に「行く」を意味しますが、'${text} on' というフレーズでは「続ける」を意味します。`,
-    },
-  };
-
-  const fallback =
-    fallbackTranslations[targetLanguage] || fallbackTranslations["Arabic"];
+  const arabicPhraseTranslation = isPhraseWord
+    ? context.includes(text + " on")
+      ? "استمررت"
+      : context.includes(text + " up")
+      ? "استسلمت"
+      : context.includes("gave " + text)
+      ? "تخليت عنه"
+      : "ذهبت"
+    : "ذهبت";
+  const arabicTranslation = "نصنع";
 
   return {
     selected_word: text,
     base_word: text,
-    general_translation: ["go", "move", "travel"].map(
-      () => fallback.translation
-    ),
+    general_translation: ["ذهب", "يمضي", "يتنقل"],
     is_phrasal: isPhraseWord,
     phrasal_form: isPhraseWord ? phraseForm : undefined,
     contextual_translation: {
       full_phrase: isPhraseWord ? phraseForm : text,
-      translation: isPhraseWord ? fallback.phrasal : fallback.translation,
+      translation: isPhraseWord
+        ? context.includes(text + " on")
+          ? "يستمر"
+          : context.includes(text + " up")
+          ? "يستسلم"
+          : context.includes("gave " + text)
+          ? "يتخلى عن"
+          : "يذهب"
+        : "يذهب",
     },
-    meaning_comparison: fallback.meaning,
+    meaning_comparison: isPhraseWord
+      ? context.includes(text + " on")
+        ? `كلمة '${text}' تعني بشكل عام 'يذهب'، ولكن في عبارة '${text} on' تعني 'تستمر' أو 'تواصل'. هذا يوضح كيف أن المعنى يتغير من الحركة الجسدية إلى الاستمرار في فعل شيء ما.`
+        : context.includes(text + " up")
+        ? `كلمة '${text}' تعني بشكل عام 'يذهب'، ولكن في عبارة '${text} up' تعني 'ينهض' أو 'يستسلم' حسب السياق. هذا يظهر كيف تضيف الحروف معاني مختلفة للكلمة الأساسية.`
+        : context.includes("gave " + text)
+        ? `كلمة '${text}' كجزء من عبارة 'gave ${text}' تعني 'تخلى عن' أو 'استسلم'، بينما '${text}' بمفردها تعني 'يذهب'. هذا مثال على كيف يمكن للأفعال أن تكتسب معاني مختلفة تماماً في العبارات الاصطلاحية.`
+        : `كلمة '${text}' لها عدة معاني مختلفة حسب السياق. يمكن أن تعني 'يذهب' بمعنى الانتقال، أو تأتي في تعبيرات اصطلاحية مثل '${text} through' بمعنى 'يمر عبر'.`
+      : `كلمة '${text}' يمكن أن تظهر بمفردها بمعنى 'يذهب'، أو في عبارات مثل '${text} on' (يستمر) أو '${text} up' (ينهض/يستسلم). هذا يوضح أهمية فهم السياق لتحديد المعنى الدقيق للكلمة.`,
     additional_example: {
       english: isPhraseWord
         ? `Example using "${phraseForm}" in a different context: "I couldn't understand the lecture, so I ${phraseForm}."`
         : `Example using "${text}" in a different context: "Let's ${text} a cake for the party."`,
       arabic: isPhraseWord
-        ? `Example using "${phraseForm}" in a different context: "I couldn't understand the lecture, so I ${fallback.phrasal}."`
-        : `Example using "${text}" in a different context: "Let's ${fallback.translation} a cake for the party."`,
+        ? `مثال باستخدام "${phraseForm}" في سياق مختلف: "لم أستطع فهم المحاضرة، لذلك ${arabicPhraseTranslation}."`
+        : `مثال باستخدام "${text}" في سياق مختلف: "دعنا ${arabicTranslation} كعكة للحفلة."`,
     },
   };
 };
 
 // Update the word translation prompt to include just one additional example
-const getWordTranslationPrompt = (
-  word: string,
-  context: string,
-  targetLanguage: string = "Arabic"
-) => {
+const getWordTranslationPrompt = (word: string, context: string) => {
   return `
-Translate this English word to ${targetLanguage}: "${word}"
+Translate this English word to Arabic: "${word}"
 Context: "${context}"
 
 Provide a complete translation analysis for EVERY word (whether simple or phrasal):
@@ -163,33 +131,31 @@ Format your response as a JSON object with these exact fields:
   "phrasal_form": "The complete phrasal form if applicable (e.g., 'go on')",
   "contextual_translation": {
     "full_phrase": "The original English sentence that contains the word",
-    "translation": "${targetLanguage} translation based on context"
+    "translation": "Arabic translation based on context"
   },
-  "meaning_comparison": "Explanation in ${targetLanguage} of how this word's meaning can change in different contexts.",
+  "meaning_comparison": "Explanation in Arabic of how this word's meaning can change in different contexts. For example: كلمة 'go' تعني بشكل عام 'يذهب'، ولكن في عبارة 'go on' تعني 'تستمر' أو 'تواصل'. هذا يوضح كيف أن المعنى يتغير من الحركة الجسدية إلى الاستمرار في فعل شيء ما.",
   "additional_example": {
     "english": "Example sentence using the word in a different context. If it's a phrasal verb like 'gave up', the example must include the full phrase.",
-    "arabic": "${targetLanguage} translation of this example"
+    "arabic": "Arabic translation of this example"
   }
 }
 
 IMPORTANT:
 - ALWAYS include the meaning_comparison field for EVERY word, even simple words.
-- The contextual_translation must always be in ${targetLanguage}.
+- The contextual_translation must always be in Arabic.
 - Extract only the **necessary part** of the sentence for 'full_phrase' to provide better understanding.
-- Make sure the meaning_comparison follows this format: In ${targetLanguage}, explain how the word's meaning changes in different contexts.
+- Make sure the meaning_comparison follows this format: كلمة 'X' تعني... ولكن في عبارة 'X Y' تعني...
 - If the word is part of a phrasal verb (like 'gave up' or 'go on'), ensure that the example uses the full phrasal verb.
 `;
 };
 
+
 export async function POST(req: NextRequest) {
   try {
+    console.log("🔹 OpenAI Translation API route called");
+
     // Extract request data
-    const {
-      word,
-      context = "",
-      isFullSentence = false,
-      targetLanguage = "Arabic",
-    } = await req.json();
+    const { word, context, isFullSentence = false } = await req.json();
     const textToTranslate = word?.trim();
 
     if (!textToTranslate) {
@@ -199,16 +165,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if API key is configured
+    console.log(
+      `🔍 Translating ${
+        isFullSentence ? "sentence" : "word"
+      }: "${textToTranslate}"`
+    );
+
+    // Check API key configuration
     if (!isApiKeyConfigured()) {
+      console.warn("⚠️ API key not configured, using fallback translation.");
       return NextResponse.json(
-        getFallbackTranslation(word, context, isFullSentence, targetLanguage)
+        getFallbackTranslation(textToTranslate, context, isFullSentence)
       );
     }
 
     let prompt = isFullSentence
       ? `
-Translate this English sentence to ${targetLanguage}: "${textToTranslate}"
+Translate this English sentence to Arabic: "${textToTranslate}"
 Context: "${context}"
 
 Translate sentences with full context in mind. Preserve idioms, phrasal verbs, and expressions naturally. Focus on meaning rather than word-by-word translation.
@@ -216,19 +189,19 @@ Translate sentences with full context in mind. Preserve idioms, phrasal verbs, a
 Format your response as a JSON object with these exact fields:
 {
   "original_text": "${textToTranslate}",
-  "translation": "${targetLanguage} translation of the full sentence",
+  "translation": "Arabic translation of the full sentence",
   "is_sentence": true,
   "contextual_elements": [
     {
       "element": "Any special phrase or idiom in the sentence",
-      "translation": "${targetLanguage} translation of this element",
-      "explanation": "Brief explanation in ${targetLanguage} about why this translation was chosen"
+      "translation": "Arabic translation of this element",
+      "explanation": "Brief explanation in Arabic about why this translation was chosen"
     }
   ]
 }
 If no special contextual elements exist, return an empty array for "contextual_elements".
 `
-      : getWordTranslationPrompt(textToTranslate, context, targetLanguage);
+      : getWordTranslationPrompt(textToTranslate, context);
 
     try {
       // Call OpenAI API with GPT-4o-mini
@@ -237,7 +210,8 @@ If no special contextual elements exist, return an empty array for "contextual_e
         messages: [
           {
             role: "system",
-            content: `You are a professional translator specializing in English to ${targetLanguage} translations, with expertise in idioms, phrases, and contextual meanings.`,
+            content:
+              "You are a professional translator specializing in English to Arabic translations, with expertise in idioms, phrases, and contextual meanings.",
           },
           {
             role: "user",
@@ -247,6 +221,8 @@ If no special contextual elements exist, return an empty array for "contextual_e
         temperature: 0.3, // Keeps translations more accurate
         response_format: { type: "json_object" },
       });
+
+      console.log("✅ OpenAI Translation response received");
 
       const content = response.choices[0]?.message?.content;
 
@@ -258,19 +234,21 @@ If no special contextual elements exist, return an empty array for "contextual_e
         // Parse JSON response
         return NextResponse.json(JSON.parse(content));
       } catch (parseError) {
-        console.error("Error parsing OpenAI response");
+        console.error("❌ Error parsing OpenAI response:", parseError);
+        console.warn("⚠️ Falling back to manual translation.");
         return NextResponse.json(
-          getFallbackTranslation(word, context, isFullSentence, targetLanguage)
+          getFallbackTranslation(textToTranslate, context, isFullSentence)
         );
       }
     } catch (apiError) {
-      console.error("OpenAI API call failed");
+      console.error("❌ OpenAI API call failed:", apiError);
+      console.warn("⚠️ Using fallback translation due to API failure.");
       return NextResponse.json(
-        getFallbackTranslation(word, context, isFullSentence, targetLanguage)
+        getFallbackTranslation(textToTranslate, context, isFullSentence)
       );
     }
   } catch (error) {
-    console.error("Server error in translation endpoint");
+    console.error("❌ Unexpected server error:", error);
     return NextResponse.json(
       { error: "An internal error occurred. Please try again later." },
       { status: 500 }

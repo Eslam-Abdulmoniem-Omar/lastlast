@@ -1,56 +1,87 @@
 "use client";
 
 import React, { createContext, useEffect, useState } from "react";
-import { signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from "firebase/auth";
 import { User } from "firebase/auth";
 import { auth } from "../firebase/firebase";
+import { toast } from "react-hot-toast";
+import { signInWithGoogle, logoutUser } from "../firebase/authService";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<User | null>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  signInWithGoogle: async () => {},
+  signInWithGoogle: async () => null,
   signOut: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setUser(user);
+    // Set a timeout to prevent indefinite loading state
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("Auth state loading timed out after 5 seconds");
+        setLoading(false);
+      }
+    }, 5000);
+
+    // Only set up the auth listener if auth is not null
+    if (!auth) {
+      console.error(
+        "Auth object is null, Firebase may not be initialized correctly"
+      );
       setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Error signing in with Google", error);
+      clearTimeout(loadingTimeout);
+      return;
     }
-  };
 
-  const signOutUser = async () => {
     try {
-      await firebaseSignOut(auth);
+      const unsubscribe = auth.onAuthStateChanged(
+        (user) => {
+          setUser(user);
+          setLoading(false);
+          setAuthInitialized(true);
+          clearTimeout(loadingTimeout);
+        },
+        (error) => {
+          console.error("Auth state change error:", error);
+          setLoading(false);
+          clearTimeout(loadingTimeout);
+        }
+      );
+
+      return () => {
+        unsubscribe();
+        clearTimeout(loadingTimeout);
+      };
     } catch (error) {
-      console.error("Error signing out", error);
+      console.error("Error setting up auth state listener:", error);
+      setLoading(false);
+      clearTimeout(loadingTimeout);
+      return () => {
+        clearTimeout(loadingTimeout);
+      };
     }
-  };
+  }, [loading]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut: signOutUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading: loading && !authInitialized,
+        signInWithGoogle,
+        signOut: logoutUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

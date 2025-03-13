@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { DialogueSegment } from "@/lib/types";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
-import { useAuth } from "@/lib/hooks/useAuth";
 
 // Practice steps
 const PRACTICE_STEPS = [
@@ -19,36 +18,41 @@ const PRACTICE_STEPS = [
 
 export default function ShortVideoPracticePage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
   const [practiceData, setPracticeData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [activeTab, setActiveTab] = useState("listening");
+  const [showTranscript, setShowTranscript] = useState(true);
 
-  // Authentication protection - redirect to login if not authenticated
   useEffect(() => {
-    if (!authLoading && !user) {
-      // User is not authenticated, redirect to login page
-      toast.error("Please sign in to practice videos");
-      router.push("/login");
-    }
-  }, [user, authLoading, router]);
+    // Log that the effect is running
+    console.log("Practice page useEffect running");
 
-  // Load practice data from localStorage
-  useEffect(() => {
+    // Load practice data from localStorage
     const loadPracticeData = () => {
       try {
         console.log("Loading practice data from localStorage");
-        const savedData = localStorage.getItem("practiceData");
-        if (!savedData) {
+        const storedData = localStorage.getItem("current-practice-data");
+        console.log("Stored data:", storedData ? "Found" : "Not found");
+
+        if (!storedData) {
+          console.error("No practice data found in localStorage");
           toast.error("No practice data found. Please select a video first.");
           router.push("/short-videos");
           return;
         }
-        setPracticeData(JSON.parse(savedData));
+
+        const data = JSON.parse(storedData);
+        console.log("Parsed practice data:", data);
+        console.log(
+          "Data has dialogueSegments:",
+          data.dialogueSegments
+            ? `Yes, ${data.dialogueSegments.length} segments`
+            : "No"
+        );
+        setPracticeData(data);
       } catch (error) {
         console.error("Error loading practice data:", error);
-        toast.error("Failed to load practice data");
+        toast.error("Error loading practice data. Please try again.");
         router.push("/short-videos");
       } finally {
         setLoading(false);
@@ -58,189 +62,74 @@ export default function ShortVideoPracticePage() {
     loadPracticeData();
   }, [router]);
 
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c1527] to-[#111f3d]">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="w-16 h-16 bg-[#232323] rounded-xl mb-4 flex items-center justify-center">
-            <div className="w-12 h-12 bg-gray-700 animate-pulse rounded-lg"></div>
-          </div>
-          <div className="h-4 w-24 bg-gray-700 animate-pulse rounded mb-3"></div>
-          <div className="h-3 w-32 bg-gray-700/50 animate-pulse rounded"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // If user is not authenticated and not in loading state, don't render the actual page content
-  if (!user && !authLoading) {
-    return null; // This will prevent any flickering before the redirect happens
-  }
-
-  const goToNextStep = () => {
-    if (currentStep < PRACTICE_STEPS.length - 1) {
-      setCompletedSteps([...completedSteps, currentStep]);
-      setCurrentStep(currentStep + 1);
-      window.scrollTo(0, 0);
-    }
+  const toggleTranscript = () => {
+    setShowTranscript(!showTranscript);
   };
 
-  const goToPreviousStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-      window.scrollTo(0, 0);
-    }
-  };
-
-  const goToStep = (stepIndex: number) => {
-    if (stepIndex <= Math.max(...completedSteps, 0) + 1) {
-      setCurrentStep(stepIndex);
-      window.scrollTo(0, 0);
-    }
-  };
-
-  const renderStepContent = () => {
+  const renderContent = () => {
     if (!practiceData) return null;
 
-    switch (PRACTICE_STEPS[currentStep]) {
-      case "overview":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Practice Overview</h2>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold mb-4">
-                {practiceData.title}
-              </h3>
-
-              {practiceData.embedUrl && (
-                <div className="aspect-video mb-6">
-                  <iframe
-                    src={practiceData.embedUrl}
-                    className="w-full h-full rounded-md"
-                    allowFullScreen
-                  ></iframe>
-                </div>
-              )}
-
-              <div className="mb-6">
-                <h4 className="text-lg font-medium mb-2">Your Practice Plan</h4>
-                <ol className="list-decimal list-inside space-y-2 pl-4">
-                  <li>Watch the video and understand the content</li>
-                  <li>Practice listening and comprehension</li>
-                  <li>Learn key vocabulary from the video</li>
-                  <li>Practice speaking with guided exercises</li>
-                  <li>
-                    Free speaking practice to apply what you&apos;ve learned
-                  </li>
-                </ol>
-              </div>
-
-              <div>
-                <h4 className="text-lg font-medium mb-2">Dialogue Segments</h4>
-                <p className="text-gray-600 mb-4">
-                  This video has been divided into{" "}
-                  {practiceData.dialogueSegments.length} segments for practice.
-                </p>
-
-                <div className="max-h-60 overflow-y-auto p-3 border rounded-md">
-                  {practiceData.dialogueSegments.map(
-                    (segment: DialogueSegment, index: number) => (
-                      <div
-                        key={segment.id}
-                        className="mb-3 pb-3 border-b last:border-b-0"
-                      >
-                        <div className="flex items-center text-sm text-gray-500 mb-1">
-                          <span>Segment {index + 1}</span>
-                          <span className="mx-2">•</span>
-                          <span>
-                            {formatTime(segment.startTime)} -{" "}
-                            {formatTime(segment.endTime)}
-                          </span>
-                        </div>
-                        <p className="text-gray-800">{segment.text}</p>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
+    switch (activeTab) {
       case "listening":
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Listening Practice</h2>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <p className="mb-4">
-                Listen to the video carefully and focus on understanding the
-                content. You can play specific segments to practice your
-                listening skills.
-              </p>
-
-              {practiceData.embedUrl && (
-                <div className="aspect-video mb-6">
-                  <iframe
-                    src={practiceData.embedUrl}
-                    className="w-full h-full rounded-md"
-                    allowFullScreen
-                  ></iframe>
-                </div>
-              )}
-
-              <div className="mt-6">
-                <h3 className="text-lg font-medium mb-3">Dialogue Segments</h3>
-                <div className="space-y-4">
-                  {practiceData.dialogueSegments.map(
-                    (segment: DialogueSegment, index: number) => (
-                      <div
-                        key={segment.id}
-                        className="p-4 border rounded-md hover:bg-gray-50"
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-medium">
-                            Segment {index + 1}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            {formatTime(segment.startTime)} -{" "}
-                            {formatTime(segment.endTime)}
-                          </span>
-                        </div>
-                        <p className="text-gray-800">{segment.text}</p>
-                        <button
-                          className="mt-2 text-blue-600 text-sm hover:underline"
-                          onClick={() => {
-                            // This would ideally seek the video to the specific timestamp
-                            // For now, we'll just show a message
-                            toast.success(`Playing segment ${index + 1}`);
-                          }}
-                        >
-                          Play this segment
-                        </button>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
+            {/* Video player is common across all tabs */}
+            <div className="aspect-video mb-6 relative">
+              <iframe
+                src={practiceData.embedUrl}
+                className="w-full h-full rounded-md"
+                allowFullScreen
+              ></iframe>
             </div>
+
+            {showTranscript && (
+              <div className="bg-white p-4 rounded-lg shadow-sm max-h-96 overflow-y-auto">
+                {practiceData.dialogueSegments.map(
+                  (segment: DialogueSegment, index: number) => (
+                    <div
+                      key={segment.id}
+                      className="mb-4 pb-4 border-b last:border-b-0 cursor-pointer hover:bg-gray-50"
+                      onClick={() => {
+                        // This would ideally seek the video to the specific timestamp
+                        // For now, we'll just show a message
+                        toast.success(
+                          `Playing from ${formatTime(segment.startTime)}`
+                        );
+                      }}
+                    >
+                      <div className="text-gray-500 mb-1">
+                        {formatTime(segment.startTime)}
+                      </div>
+                      <p className="text-gray-800">{segment.text}</p>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </div>
         );
 
       case "vocabulary":
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Vocabulary Practice</h2>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <p className="mb-6">
-                Learn and practice key vocabulary from the video. Understanding
-                these words will help you better comprehend the content.
-              </p>
+            {/* Video player is common across all tabs */}
+            <div className="aspect-video mb-6">
+              <iframe
+                src={practiceData.embedUrl}
+                className="w-full h-full rounded-md"
+                allowFullScreen
+              ></iframe>
+            </div>
 
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-xl font-semibold mb-4">Key Vocabulary</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {generateVocabularyItems(practiceData.dialogueSegments).map(
                   (item, index) => (
-                    <div key={index} className="p-4 border rounded-md">
+                    <div
+                      key={index}
+                      className="p-4 border rounded-md hover:bg-gray-50"
+                    >
                       <div className="font-medium text-lg mb-1">
                         {item.word}
                       </div>
@@ -249,7 +138,7 @@ export default function ShortVideoPracticePage() {
                       </div>
                       <div className="text-gray-700">{item.definition}</div>
                       <div className="mt-2 text-gray-600 italic">
-                        &quot;{item.example}&quot;
+                        "{item.example}"
                       </div>
                     </div>
                   )
@@ -259,39 +148,39 @@ export default function ShortVideoPracticePage() {
           </div>
         );
 
-      case "guided-speaking":
+      case "guided-practice":
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Guided Speaking Practice</h2>
+            {/* Video player is common across all tabs */}
+            <div className="aspect-video mb-6">
+              <iframe
+                src={practiceData.embedUrl}
+                className="w-full h-full rounded-md"
+                allowFullScreen
+              ></iframe>
+            </div>
+
             <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-xl font-semibold mb-4">Speaking Practice</h3>
               <p className="mb-6">
                 Practice speaking by repeating the dialogue segments. Try to
                 match the pronunciation and intonation.
               </p>
 
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {practiceData.dialogueSegments.map(
                   (segment: DialogueSegment, index: number) => (
                     <div
                       key={segment.id}
-                      className="border rounded-md overflow-hidden"
+                      className="p-4 border rounded-md hover:bg-gray-50"
                     >
-                      <div className="bg-gray-50 p-3 border-b">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">
-                            Segment {index + 1}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            {formatTime(segment.startTime)} -{" "}
-                            {formatTime(segment.endTime)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <p className="text-gray-800 mb-4">{segment.text}</p>
-                        <div className="flex flex-wrap gap-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-500">
+                          {formatTime(segment.startTime)}
+                        </span>
+                        <div className="flex space-x-2">
                           <button
-                            className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-md text-sm hover:bg-blue-200"
+                            className="px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-sm hover:bg-blue-200"
                             onClick={() => {
                               // This would ideally play the segment
                               toast.success(`Playing segment ${index + 1}`);
@@ -300,7 +189,7 @@ export default function ShortVideoPracticePage() {
                             Listen
                           </button>
                           <button
-                            className="px-3 py-1.5 bg-green-100 text-green-700 rounded-md text-sm hover:bg-green-200"
+                            className="px-3 py-1 bg-green-100 text-green-700 rounded-md text-sm hover:bg-green-200"
                             onClick={() => {
                               // This would ideally start recording
                               toast.success(
@@ -308,141 +197,14 @@ export default function ShortVideoPracticePage() {
                               );
                             }}
                           >
-                            Record
-                          </button>
-                          <button
-                            className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-md text-sm hover:bg-purple-200"
-                            onClick={() => {
-                              // This would ideally compare the recording with the original
-                              toast.success(
-                                `Comparing your speech for segment ${index + 1}`
-                              );
-                            }}
-                          >
-                            Compare
+                            Practice
                           </button>
                         </div>
                       </div>
+                      <p className="text-gray-800">{segment.text}</p>
                     </div>
                   )
                 )}
-              </div>
-            </div>
-          </div>
-        );
-
-      case "free-speaking":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Free Speaking Practice</h2>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <p className="mb-6">
-                Now it&apos;s time to practice speaking freely about the topic
-                of the video. Use the vocabulary and phrases you&apos;ve
-                learned.
-              </p>
-
-              <div className="mb-6">
-                <h3 className="text-lg font-medium mb-3">Speaking Prompts</h3>
-                <ul className="space-y-3">
-                  {generateSpeakingPrompts(
-                    practiceData.title,
-                    practiceData.dialogueSegments
-                  ).map((prompt, index) => (
-                    <li key={index} className="p-3 bg-gray-50 rounded-md">
-                      {prompt}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="p-4 border rounded-md bg-blue-50">
-                <h3 className="text-lg font-medium mb-2 text-blue-800">
-                  Record Your Response
-                </h3>
-                <p className="text-blue-700 mb-4">
-                  Choose one of the prompts above and record your response. Try
-                  to speak for at least 1 minute.
-                </p>
-                <button
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  onClick={() => {
-                    // This would ideally start recording
-                    toast.success("Recording started");
-                  }}
-                >
-                  Start Recording
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-
-      case "summary":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Practice Summary</h2>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold mb-4">Congratulations!</h3>
-              <p className="mb-6">
-                You&apos;ve completed the practice session for &quot;
-                {practiceData.title}
-                &quot;. Here&apos;s a summary of what you&apos;ve accomplished:
-              </p>
-
-              <div className="space-y-4 mb-6">
-                <div className="p-3 bg-green-50 rounded-md">
-                  <div className="font-medium text-green-800">
-                    Listening Practice
-                  </div>
-                  <div className="text-green-700">
-                    You practiced listening to{" "}
-                    {practiceData.dialogueSegments.length} dialogue segments.
-                  </div>
-                </div>
-
-                <div className="p-3 bg-blue-50 rounded-md">
-                  <div className="font-medium text-blue-800">
-                    Vocabulary Practice
-                  </div>
-                  <div className="text-blue-700">
-                    You learned{" "}
-                    {
-                      generateVocabularyItems(practiceData.dialogueSegments)
-                        .length
-                    }{" "}
-                    new vocabulary items.
-                  </div>
-                </div>
-
-                <div className="p-3 bg-purple-50 rounded-md">
-                  <div className="font-medium text-purple-800">
-                    Speaking Practice
-                  </div>
-                  <div className="text-purple-700">
-                    You practiced speaking with guided exercises and free
-                    speaking prompts.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Link
-                  href="/short-videos"
-                  className="px-4 py-2 bg-gray-100 text-gray-800 rounded-md hover:bg-gray-200 text-center"
-                >
-                  Back to Videos
-                </Link>
-                <button
-                  onClick={() => {
-                    setCurrentStep(0);
-                    setCompletedSteps([]);
-                    window.scrollTo(0, 0);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-center"
-                >
-                  Practice Again
-                </button>
               </div>
             </div>
           </div>
@@ -482,98 +244,115 @@ export default function ShortVideoPracticePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Progress Steps */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold">Short Video Practice</h1>
-          <Link
-            href="/short-videos"
-            className="text-blue-600 hover:underline text-sm"
-          >
-            Back to Videos
-          </Link>
-        </div>
+    <div className="bg-blue-500 bg-gradient-to-r from-blue-500 to-purple-600">
+      {/* Header */}
+      <div className="container mx-auto px-4 py-6 text-white">
+        <h1 className="text-3xl font-bold">
+          {practiceData.title || "Dramatic Dialogue Practice"}
+        </h1>
+        <p className="text-lg">
+          English Drama Practice •{" "}
+          {Math.ceil(
+            practiceData.dialogueSegments.reduce(
+              (total: number, segment: DialogueSegment) =>
+                total + (segment.endTime - segment.startTime),
+              0
+            ) / 60
+          )}{" "}
+          min
+        </p>
+      </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-lg font-medium">{practiceData.title}</div>
-            <div className="text-sm text-gray-500">
-              Step {currentStep + 1} of {PRACTICE_STEPS.length}
-            </div>
-          </div>
-
-          <div className="relative">
-            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
-              <div
-                style={{
-                  width: `${
-                    ((currentStep + 1) / PRACTICE_STEPS.length) * 100
-                  }%`,
-                }}
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500"
-              ></div>
-            </div>
-            <div className="flex justify-between">
-              {PRACTICE_STEPS.map((step, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col items-center cursor-pointer ${
-                    index <= Math.max(...completedSteps, 0) + 1
-                      ? "text-blue-600"
-                      : "text-gray-400"
-                  }`}
-                  onClick={() => goToStep(index)}
-                >
-                  <div
-                    className={`w-8 h-8 flex items-center justify-center rounded-full mb-1 ${
-                      index < currentStep
-                        ? "bg-blue-100 text-blue-600"
-                        : index === currentStep
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-400"
-                    }`}
-                  >
-                    {index + 1}
-                  </div>
-                  <div className="text-xs capitalize hidden sm:block">
-                    {step.replace("-", " ")}
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Tabs */}
+      <div className="bg-white">
+        <div className="container mx-auto">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab("listening")}
+              className={`flex-1 py-4 px-6 flex items-center justify-center gap-2 ${
+                activeTab === "listening"
+                  ? "bg-blue-100 text-blue-700 font-medium"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 2a3 3 0 00-3 3v5a3 3 0 006 0V5a3 3 0 00-3-3zm0 14a1 1 0 100-2 1 1 0 000 2z"
+                  clipRule="evenodd"
+                />
+                <path
+                  fillRule="evenodd"
+                  d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Listening
+            </button>
+            <button
+              onClick={() => setActiveTab("vocabulary")}
+              className={`flex-1 py-4 px-6 flex items-center justify-center gap-2 ${
+                activeTab === "vocabulary"
+                  ? "bg-blue-100 text-blue-700 font-medium"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
+              </svg>
+              Vocabulary
+            </button>
+            <button
+              onClick={() => setActiveTab("guided-practice")}
+              className={`flex-1 py-4 px-6 flex items-center justify-center gap-2 ${
+                activeTab === "guided-practice"
+                  ? "bg-blue-100 text-blue-700 font-medium"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Guided Practice
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Step Content */}
-      <div className="mb-8">{renderStepContent()}</div>
+      {/* Content */}
+      <div className="container mx-auto px-4 py-8 bg-gray-50 min-h-screen">
+        <div className="relative">
+          {renderContent()}
 
-      {/* Navigation Buttons */}
-      <div className="flex justify-between mt-8">
-        <button
-          onClick={goToPreviousStep}
-          disabled={currentStep === 0}
-          className={`px-4 py-2 rounded-md ${
-            currentStep === 0
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-              : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-          }`}
-        >
-          Previous
-        </button>
-
-        <button
-          onClick={goToNextStep}
-          disabled={currentStep === PRACTICE_STEPS.length - 1}
-          className={`px-4 py-2 rounded-md ${
-            currentStep === PRACTICE_STEPS.length - 1
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-              : "bg-blue-600 text-white hover:bg-blue-700"
-          }`}
-        >
-          Next
-        </button>
+          {/* Transcript toggle button */}
+          {activeTab === "listening" && (
+            <button
+              onClick={toggleTranscript}
+              className="absolute top-2 right-2 px-3 py-1.5 bg-white text-blue-700 rounded-md text-sm hover:bg-gray-100 shadow-sm"
+            >
+              {showTranscript ? "Hide Transcript" : "Show Transcript"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -588,9 +367,11 @@ const formatTime = (seconds: number): string => {
 
 // Helper function to generate vocabulary items from dialogue segments
 const generateVocabularyItems = (segments: DialogueSegment[]) => {
+  // This is a placeholder function that would ideally extract real vocabulary
+  // For now, we'll generate some sample vocabulary items
   const allText = segments.map((segment) => segment.text).join(" ");
   const words = allText.split(/\s+/).filter((word) => word.length > 4);
-  const uniqueWords = Array.from(new Set(words)).slice(0, 8);
+  const uniqueWords = [...new Set(words)].slice(0, 8);
 
   const partsOfSpeech = ["noun", "verb", "adjective", "adverb"];
 
@@ -601,20 +382,4 @@ const generateVocabularyItems = (segments: DialogueSegment[]) => {
     definition: `Definition of "${word.replace(/[.,!?;:]/g, "")}"`,
     example: `Example sentence using "${word.replace(/[.,!?;:]/g, "")}".`,
   }));
-};
-
-// Helper function to generate speaking prompts
-const generateSpeakingPrompts = (
-  title: string,
-  segments: DialogueSegment[]
-) => {
-  // This is a placeholder function that would ideally generate relevant prompts
-  // For now, we'll return some generic prompts
-  return [
-    `What is your opinion on the topic discussed in the video?`,
-    `Can you summarize the main points of the video in your own words?`,
-    `How does this topic relate to your personal experience?`,
-    `What did you find most interesting about this video and why?`,
-    `If you could ask the creator of this video one question, what would it be?`,
-  ];
 };

@@ -1,84 +1,113 @@
-import { NextRequest, NextResponse } from "next/server";
-import * as deepgram from "@deepgram/sdk";
+import { NextResponse } from "next/server";
 
 // Set dynamic so the route is not statically optimized by Next.js
 export const dynamic = "force-dynamic";
 
-// Configure the route segment to handle larger files
-export const runtime = "nodejs";
-export const maxDuration = 60; // Set max duration in seconds that matches your needs
-
-// Return a secure transcription response
-const getSecureFallbackResponse = (
-  error = "Transcription service unavailable"
-) => {
-  return NextResponse.json(
-    {
-      results: {
-        channels: [
-          {
-            alternatives: [
-              {
-                transcript: "Transcription service unavailable.",
-              },
-            ],
-          },
-        ],
-      },
-      error,
+// Configure the API to handle larger file uploads
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "10mb",
     },
-    { status: 500 }
-  );
+    responseLimit: false,
+  },
 };
 
-export async function POST(req: NextRequest) {
-  try {
-    // Remove API route logging
+// Simple validation to check API key availability
+const isApiKeyConfigured = () => {
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+  if (!apiKey) {
+    console.error(
+      "DEEPGRAM_API_KEY is not configured in environment variables"
+    );
+    return false;
+  }
+  return true;
+};
 
-    // Get the Deepgram API key from environment variables
+export async function POST(request: Request) {
+  try {
+    console.log("Transcribe API called");
+
+    // Check if API key is configured
+    if (!isApiKeyConfigured()) {
+      return NextResponse.json(
+        {
+          error: "Deepgram API key is not configured",
+        },
+        { status: 500 }
+      );
+    }
+
+    // Get the API key
     const apiKey = process.env.DEEPGRAM_API_KEY;
 
-    // Check if API key is defined
-    if (!apiKey) {
-      return getSecureFallbackResponse("API configuration error");
-    }
+    // Parse the multipart form data
+    const formData = await request.formData();
+    const audioFile = formData.get("audio");
 
-    // Clone the request to handle it as a blob
-    const clonedReq = req.clone();
-    const audioBlob = await clonedReq.blob();
-
-    // Create the Deepgram client and configure options
-    const deepgramClient = new deepgram.Deepgram(apiKey);
-    const transcriptionOptions = {
-      smart_format: true,
-      model: "nova-2",
-      language: "en-US",
-    };
-
-    try {
-      // Convert blob to ArrayBuffer for Deepgram
-      const arrayBuffer = await audioBlob.arrayBuffer();
-
-      // Create the source from buffer
-      const source = {
-        buffer: Buffer.from(arrayBuffer),
-        mimetype: audioBlob.type || "audio/webm",
-      };
-
-      // Send to Deepgram for transcription
-      const result = await deepgramClient.transcription.preRecorded(
-        source,
-        transcriptionOptions
+    if (!audioFile || !(audioFile instanceof Blob)) {
+      console.error("No audio file provided or invalid format");
+      return NextResponse.json(
+        { error: "No audio file provided" },
+        { status: 400 }
       );
-
-      // Return the transcription results
-      return NextResponse.json(result);
-    } catch (transcriptionError) {
-      console.error("Transcription error");
-      return getSecureFallbackResponse("Failed to process audio");
     }
+
+    console.log("Audio file received:", audioFile.size, "bytes");
+
+    // Convert the blob to an array buffer
+    const arrayBuffer = await audioFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Send the audio to Deepgram for transcription with optimized parameters
+    const response = await fetch(
+      "https://api.deepgram.com/v1/listen?model=nova-2&language=en-US&punctuate=true&smart_format=true&diarize=false&filler_words=false&utterances=false&detect_language=false",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${apiKey}`,
+          "Content-Type": "audio/webm",
+        },
+        body: buffer,
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `Deepgram API error: ${response.status} ${response.statusText}`,
+        errorText
+      );
+      return NextResponse.json(
+        {
+          error: `Deepgram API error: ${response.status} ${response.statusText}`,
+        },
+        { status: response.status }
+      );
+    }
+
+    const data = await response.json();
+
+    // Extract the transcript from the response
+    const transcript =
+      data.results?.channels[0]?.alternatives[0]?.transcript || "";
+    console.log("Transcription result:", transcript || "No transcript");
+
+    if (!transcript || transcript.trim() === "") {
+      console.warn("Empty transcript returned from Deepgram");
+      return NextResponse.json({ transcript: "" });
+    }
+
+    return NextResponse.json({ transcript });
   } catch (error) {
-    console.error("Error in transcription endpoint");
-    return getSecureFallbackResponse();
+    console.error("Error in Deepgram transcribe API:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
+
+    return NextResponse.json(
+      { error: `Failed to transcribe audio: ${errorMessage}` },
+      { status: 500 }
+    );
   }
 }

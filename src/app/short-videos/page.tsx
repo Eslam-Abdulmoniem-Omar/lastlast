@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import TimestampedYouTubePlayer from "../../components/TimestampedYouTubePlayer";
 import { sampleYoutubeShort } from "../../lib/data/sampleYoutubeShort";
 import Link from "next/link";
-import { ArrowLeft, Plus, Video, Clock, User, Tag } from "lucide-react";
+import { ArrowLeft, Plus, Video, Clock, User, Tag, LogIn } from "lucide-react";
 import { DeepgramContextProvider } from "@/lib/contexts/DeepgramContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getPodcasts } from "@/lib/firebase/podcastUtils";
@@ -73,13 +73,6 @@ export default function ShortVideosPage() {
 
   // Add a handlePractice function to start practice with a selected video
   const handlePractice = (video: Podcast) => {
-    // Check if user is logged in
-    if (!user) {
-      toast.error("Please sign in to practice with videos");
-      router.push("/login");
-      return;
-    }
-
     // Create a practice session in localStorage
     const practiceData = {
       id: video.id,
@@ -101,27 +94,36 @@ export default function ShortVideosPage() {
     );
     console.log("Navigating to practice page...");
 
-    // Navigate to the new practice page
-    router.push("/practice");
+    // Navigate to the practice page
+    router.push("/practice/short-video");
+  };
+
+  const handleAddNewVideo = () => {
+    if (!user) {
+      toast.error("Please sign in to add a new video");
+      router.push("/login?redirect=/short-videos/add");
+    } else {
+      router.push("/short-videos/add");
+    }
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#0c1527] to-[#111f3d] py-12 text-white">
-      <div className="container mx-auto px-4">
+    <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 mt-16">
         <div className="max-w-5xl mx-auto">
           <div className="mb-8 flex justify-between items-center">
             <div className="flex items-center">
               <Link
                 href="/"
-                className="mr-4 p-2 rounded-full hover:bg-white/10 transition-colors"
+                className="mr-4 p-2 rounded-full hover:bg-gray-200 transition-colors"
               >
-                <ArrowLeft size={20} className="text-white" />
+                <ArrowLeft size={20} />
               </Link>
               <div>
-                <h1 className="text-3xl font-bold text-white mb-2">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
                   Short Video Practice
                 </h1>
-                <p className="text-white/70">
+                <p className="text-gray-600">
                   Improve your English with short, engaging videos designed for
                   language learners.
                 </p>
@@ -131,89 +133,73 @@ export default function ShortVideosPage() {
             {user ? (
               <Link
                 href="/short-videos/add"
-                className="bg-secondary text-white px-5 py-2.5 rounded-lg hover:bg-secondary-light flex items-center font-bold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 border border-secondary-light/30"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
               >
                 <Plus size={18} className="mr-2" />
                 Add New Video
               </Link>
             ) : (
-              <Link
-                href="/login"
-                className="bg-primary/80 text-white px-5 py-2.5 rounded-lg hover:bg-primary flex items-center font-bold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 border border-primary-light/30"
+              <button
+                onClick={handleAddNewVideo}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center"
               >
-                <User size={18} className="mr-2" />
-                Sign in to Add Videos
-              </Link>
+                <LogIn size={18} className="mr-2" />
+                Sign in to Add Video
+              </button>
             )}
           </div>
 
           <div className="mb-12">
-            <div className="bg-[#1b2b48]/80 backdrop-blur-sm rounded-xl p-6 border border-[#2e3b56]/50 shadow-lg">
-              <DeepgramContextProvider>
-                <TimestampedYouTubePlayer
-                  podcast={sampleYoutubeShort}
-                  onComplete={handleComplete}
-                />
-              </DeepgramContextProvider>
+            <h2 className="text-2xl font-bold mb-6">
+              Featured Practice: Dramatic Dialogue
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Practice English with this dramatic dialogue between two speakers
+              discussing their relationship. Click on any dialogue line to jump
+              to that timestamp in the video.
+            </p>
 
-              {completed && (
-                <div className="p-4 bg-green-500/10 border border-green-500/30 backdrop-blur-sm text-green-300 rounded-lg mt-6">
-                  <p className="font-medium">
-                    You&apos;ve completed this practice!
-                  </p>
-                  <p>
-                    Try clicking on different dialogue lines or using the guided
-                    practice mode.
-                  </p>
-                </div>
-              )}
+            <DeepgramContextProvider>
+              <TimestampedYouTubePlayer
+                podcast={sampleYoutubeShort}
+                onComplete={handleComplete}
+              />
+            </DeepgramContextProvider>
 
-              {!user && (
-                <div className="p-4 bg-primary/10 border border-primary/30 backdrop-blur-sm text-primary-light rounded-lg mt-6">
-                  <p className="font-medium">
-                    Want to save your progress and add your own videos?
-                  </p>
-                  <div className="mt-2 flex gap-3">
-                    <Link
-                      href="/login"
-                      className="px-4 py-2 bg-primary/80 hover:bg-primary transition-colors rounded-lg text-white font-medium text-sm"
-                    >
-                      Sign In
-                    </Link>
-                    <Link
-                      href="/signup"
-                      className="px-4 py-2 bg-secondary/80 hover:bg-secondary transition-colors rounded-lg text-white font-medium text-sm"
-                    >
-                      Sign Up
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-8 p-6 bg-[#1b2b48]/80 backdrop-blur-sm rounded-lg border border-[#2e3b56]/50 shadow-lg">
-                <h3 className="text-xl font-bold text-white mb-4">
-                  How to Use This Feature
-                </h3>
-                <ul className="list-disc pl-5 space-y-2 text-white/80">
-                  <li>
-                    Click on any dialogue line to jump to that timestamp in the
-                    video
-                  </li>
-                  <li>Use the play/pause button to control playback</li>
-                  <li>
-                    Switch between &quot;Listening&quot; and &quot;Guided
-                    Practice&quot; modes using the tabs
-                  </li>
-                  <li>
-                    In guided practice mode, you&apos;ll be prompted to repeat
-                    each line
-                  </li>
-                  <li>
-                    Your speech will be transcribed in real-time using Deepgram
-                    AI
-                  </li>
-                </ul>
+            {completed && (
+              <div className="p-4 bg-green-100 text-green-800 rounded-lg mt-6">
+                <p className="font-medium">
+                  You&apos;ve completed this practice!
+                </p>
+                <p>
+                  Try clicking on different dialogue lines or using the guided
+                  practice mode.
+                </p>
               </div>
+            )}
+
+            <div className="mt-8 p-6 bg-blue-50 rounded-lg">
+              <h3 className="text-xl font-bold text-blue-900 mb-4">
+                How to Use This Feature
+              </h3>
+              <ul className="list-disc pl-5 space-y-2 text-blue-800">
+                <li>
+                  Click on any dialogue line to jump to that timestamp in the
+                  video
+                </li>
+                <li>Use the play/pause button to control playback</li>
+                <li>
+                  Switch between &quot;Listening&quot; and &quot;Guided
+                  Practice&quot; modes using the tabs
+                </li>
+                <li>
+                  In guided practice mode, you&apos;ll be prompted to repeat
+                  each line
+                </li>
+                <li>
+                  Your speech will be transcribed in real-time using Deepgram AI
+                </li>
+              </ul>
             </div>
           </div>
         </div>

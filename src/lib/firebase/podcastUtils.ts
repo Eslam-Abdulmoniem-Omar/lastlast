@@ -21,7 +21,7 @@ import {
 } from "../types";
 
 // Podcast management functions
-export async function getPodcasts(level?: string, limit = 10) {
+export async function getPodcasts(level?: string, limitCount = 10) {
   try {
     let q;
 
@@ -30,13 +30,13 @@ export async function getPodcasts(level?: string, limit = 10) {
         collection(db, "podcasts"),
         where("level", "==", level),
         orderBy("publishedDate", "desc"),
-        limit(limit)
+        limit(limitCount)
       );
     } else {
       q = query(
         collection(db, "podcasts"),
         orderBy("publishedDate", "desc"),
-        limit(limit)
+        limit(limitCount)
       );
     }
 

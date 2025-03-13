@@ -52,7 +52,9 @@ export async function GET(
       );
 
       if (error || !result) {
-        throw new Error(error || "Failed to transcribe audio");
+        throw new Error(
+          error ? error.toString() : "Failed to transcribe audio"
+        );
       }
 
       // Extract transcript from Deepgram response

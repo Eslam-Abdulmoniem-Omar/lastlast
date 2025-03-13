@@ -129,8 +129,6 @@ export default function TimestampedYouTubePlayer({
       arabic: string;
     };
     isLoading?: boolean;
-    selected_word?: string;
-    error?: boolean;
   } | null>(null);
   const [selectedSentence, setSelectedSentence] = useState<{
     original_text: string;
@@ -143,7 +141,6 @@ export default function TimestampedYouTubePlayer({
     }>;
     isLoading?: boolean;
     explanation?: string;
-    error?: boolean;
   } | null>(null);
 
   const playerRef = useRef<YT.Player | null>(null);
@@ -270,7 +267,7 @@ export default function TimestampedYouTubePlayer({
       setIsPlaying(false);
     }
 
-    // Update progress when user watches the video - only if logged in
+    // Update progress when user watches the video
     if (user && event.data === YT.PlayerState.PLAYING) {
       updateListeningProgress(user.uid, podcast.id).catch((error) =>
         console.error("Error updating listening progress:", error)
@@ -411,32 +408,22 @@ export default function TimestampedYouTubePlayer({
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // Function to handle word click for translation
+  // Function to handle word click
   const handleWordClick = async (word: string) => {
-    // Clean the word of any punctuation
-    const cleanWord = word.replace(/[.,!?;:'"()]/g, "").toLowerCase();
+    // Clean the word for lookup (lowercase and remove punctuation)
+    const cleanWord = word
+      .toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
 
     // Set loading state
     setSelectedWord({
-      word: cleanWord,
+      word: word,
+      general_translation: ["جاري التحميل..."],
       isLoading: true,
-      selected_word: cleanWord,
-      base_word: cleanWord,
-      general_translation: [],
-      is_phrasal: false,
-      contextual_translation: {
-        full_phrase: "",
-        translation: "",
-      },
-      meaning_comparison: "",
-      additional_example: {
-        english: "",
-        arabic: "",
-      },
     });
 
     try {
-      // Get the full dialogue context
+      // Get the full dialogue context for better contextual understanding
       const fullContext = dialogueLines.map((line) => line.text).join(" ");
 
       // Call the OpenAI API for translation
@@ -447,36 +434,36 @@ export default function TimestampedYouTubePlayer({
         },
         body: JSON.stringify({
           word: cleanWord,
-          context: fullContext,
-          targetLanguage: podcast.targetLanguage || "Arabic", // Use the target language from podcast data
+          context: fullContext, // Use the full dialogue context
+          isFullSentence: false,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Translation API call failed");
+        throw new Error(`API request failed with status ${response.status}`);
       }
 
       const data = await response.json();
-      setSelectedWord({ ...data, word: cleanWord, isLoading: false });
-    } catch (error) {
-      console.error("Error translating word:", error);
+
+      // Update the selected word state with the API response
       setSelectedWord({
-        word: cleanWord,
+        word: word,
+        base_word: data.base_word || word,
+        general_translation: data.general_translation || ["ترجمة غير متوفرة"],
+        is_phrasal: data.is_phrasal || false,
+        phrasal_form: data.phrasal_form,
+        contextual_translation: data.contextual_translation || null,
+        meaning_comparison: data.meaning_comparison,
+        additional_example: data.additional_example,
         isLoading: false,
-        error: true,
-        selected_word: cleanWord,
-        base_word: cleanWord,
-        general_translation: [],
-        is_phrasal: false,
-        contextual_translation: {
-          full_phrase: "",
-          translation: "Error translating word",
-        },
-        meaning_comparison: "",
-        additional_example: {
-          english: "",
-          arabic: "",
-        },
+      });
+    } catch (error) {
+      console.error("Error fetching translation:", error);
+      // Set error state
+      setSelectedWord({
+        word: word,
+        general_translation: ["حدث خطأ في الترجمة"],
+        isLoading: false,
       });
     }
   };
@@ -561,27 +548,48 @@ export default function TimestampedYouTubePlayer({
         },
         body: JSON.stringify({
           word: sentence,
-          context: fullContext,
+          context: fullContext, // Send the full dialogue context
           isFullSentence: true,
-          targetLanguage: podcast.targetLanguage || "Arabic", // Use the target language from podcast data
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Translation API call failed");
+        console.error("API error response:", data);
+        throw new Error(
+          `API request failed with status ${response.status}: ${
+            data.error || "Unknown error"
+          }`
+        );
       }
 
-      const data = await response.json();
-      setSelectedSentence({ ...data, isLoading: false });
+      if (data.error) {
+        console.error("API returned error:", data.error);
+        throw new Error(data.error);
+      }
+
+      console.log("Sentence translation received from OpenAI:", data);
+
+      // Update the selected sentence with the API response
+      setSelectedSentence({
+        original_text: data.original_text || sentence,
+        translation: data.translation || "الترجمة غير متوفرة",
+        is_sentence: true,
+        contextual_elements: data.contextual_elements || [],
+        isLoading: false,
+        explanation: data.explanation,
+      });
     } catch (error) {
-      console.error("Error translating sentence:", error);
+      console.error("Error fetching sentence translation:", error);
+
+      // Show error state
       setSelectedSentence({
         original_text: sentence,
-        translation: "Error translating text. Please try again.",
+        translation: "خطأ في الترجمة. يرجى المحاولة مرة أخرى.",
         is_sentence: true,
         contextual_elements: [],
         isLoading: false,
-        error: true,
       });
     }
   };

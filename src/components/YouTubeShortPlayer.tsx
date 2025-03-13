@@ -120,10 +120,10 @@ export default function YouTubeShortPlayer({
   // Extract and prepare dialogue lines from podcast data
   const dialogueLines: DialogueLine[] = podcast.dialogueSegments
     ? podcast.dialogueSegments.map((segment) => ({
-        id: segment.id,
-        text: segment.text,
-        startTime: segment.startTime,
-        endTime: segment.endTime,
+    id: segment.id,
+    text: segment.text,
+    startTime: segment.startTime,
+    endTime: segment.endTime,
       }))
     : fallbackDialogueLines;
 
@@ -138,17 +138,17 @@ export default function YouTubeShortPlayer({
   useEffect(() => {
     if (typeof window !== "undefined" && !playerRef.current) {
       if (!(window as any).YT) {
-        const tag = document.createElement("script");
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName("script")[0];
-        firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
       }
 
       (window as any).onYouTubeIframeAPIReady = initializePlayer;
 
       // If the API is already loaded, initialize directly
       if ((window as any).YT && (window as any).YT.Player) {
-        initializePlayer();
+      initializePlayer();
       }
     }
 
@@ -176,19 +176,19 @@ export default function YouTubeShortPlayer({
         height: "100%",
         width: "100%",
         videoId: videoId,
-        playerVars: {
-          autoplay: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          modestbranding: 1,
-          rel: 0,
-        },
-        events: {
-          onReady: onPlayerReady,
-          onStateChange: onPlayerStateChange,
-        },
-      });
+      playerVars: {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        modestbranding: 1,
+        rel: 0,
+      },
+      events: {
+        onReady: onPlayerReady,
+        onStateChange: onPlayerStateChange,
+      },
+    });
     } catch (error) {
       console.error("Error initializing YouTube player:", error);
     }
@@ -238,8 +238,8 @@ export default function YouTubeShortPlayer({
   const pauseVideo = () => {
     if (playerRef.current && playerReady) {
       try {
-        playerRef.current.pauseVideo();
-        setIsPlaying(false);
+      playerRef.current.pauseVideo();
+      setIsPlaying(false);
       } catch (error) {
         console.error("Error pausing video:", error);
       }
@@ -714,8 +714,8 @@ export default function YouTubeShortPlayer({
       {/* Player Controls */}
       <div className="p-4 border-b">
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-4">
-            <button
+              <div className="flex items-center space-x-4">
+                <button
               onClick={previousSentence}
               className="p-2 rounded-full bg-gray-100 hover:bg-gray-200"
               title="Previous Sentence"
@@ -728,45 +728,45 @@ export default function YouTubeShortPlayer({
               onClick={isPlaying ? pauseVideo : playVideo}
               className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600"
               title={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-            </button>
+                >
+                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                </button>
 
-            <button
+                <button
               onClick={nextSentence}
               className="p-2 rounded-full bg-gray-100 hover:bg-gray-200"
               title="Next Sentence"
               disabled={currentSentenceIndex === currentSentences.length - 1}
             >
               <SkipForward size={18} />
-            </button>
-          </div>
+                </button>
+              </div>
 
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={togglePracticeMode}
-              className={`p-2 rounded-full ${
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={togglePracticeMode}
+                  className={`p-2 rounded-full ${
                 isPracticeMode
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-200 hover:bg-gray-300"
-              }`}
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-200 hover:bg-gray-300"
+                  }`}
               title="Practice Mode - Speak the sentences"
-            >
+                >
               <Mic size={20} />
-            </button>
+                </button>
 
-            <button
-              onClick={toggleGuidedPracticeMode}
-              className={`p-2 rounded-full ${
-                guidedPracticeMode
-                  ? "bg-purple-600 text-white"
-                  : "bg-gray-200 hover:bg-gray-300"
-              }`}
-              title="Guided Practice Mode - Step by step practice with corrections"
-            >
-              <BookOpen size={20} />
-            </button>
-          </div>
+                <button
+                  onClick={toggleGuidedPracticeMode}
+                  className={`p-2 rounded-full ${
+                    guidedPracticeMode
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-200 hover:bg-gray-300"
+                  }`}
+                  title="Guided Practice Mode - Step by step practice with corrections"
+                >
+                  <BookOpen size={20} />
+                </button>
+              </div>
         </div>
       </div>
 
@@ -977,10 +977,10 @@ export default function YouTubeShortPlayer({
 
             {/* Simple feedback when not in practice mode */}
             {recordingFeedback && !isPracticeMode && !guidedPracticeMode && (
-              <div className="mt-2 text-sm text-center text-gray-600">
-                {recordingFeedback}
-              </div>
-            )}
+                <div className="mt-2 text-sm text-center text-gray-600">
+                  {recordingFeedback}
+                </div>
+              )}
           </div>
         </div>
 
@@ -989,12 +989,12 @@ export default function YouTubeShortPlayer({
           <div className="md:w-1/2">
             <div className="p-4">
               <h4 className="font-medium text-lg mb-3">Full Dialogue</h4>
-              <TimestampedDialogue
-                dialogueLines={dialogueLines}
-                currentTime={currentTime}
+                <TimestampedDialogue
+                  dialogueLines={dialogueLines}
+                  currentTime={currentTime}
                 onLineClick={seekToTime}
                 activeLineId={currentSentences[currentSentenceIndex]?.id}
-              />
+                />
             </div>
           </div>
         )}

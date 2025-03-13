@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "install-python-deps": "node src/scripts/install_deps.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^0.0.48",
@@ -21,11 +22,14 @@
     "lucide-react": "^0.436.0",
     "next": "14.2.7",
     "react": "^18",
+    "react-confetti": "^6.4.0",
     "react-dom": "^18",
     "react-hot-toast": "^2.5.2",
+    "react-icons": "^5.5.0",
     "react-markdown": "^9.0.1",
     "replicate": "^0.32.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
     "@types/node": "20.17.23",

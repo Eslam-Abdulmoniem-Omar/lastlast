@@ -45,6 +45,7 @@ interface DeepgramContextProviderProps {
 
 const getApiKey = async (): Promise<string> => {
   try {
+    console.log("Fetching Deepgram API key...");
     const response = await fetch("/api/deepgram", {
       cache: "no-store",
       method: "GET",
@@ -54,26 +55,39 @@ const getApiKey = async (): Promise<string> => {
     });
 
     if (!response.ok) {
-      console.error(`Failed to fetch API configuration: ${response.status}`);
-      throw new Error(`Failed to fetch API configuration`);
+      console.error(
+        `Failed to fetch API key: ${response.status} ${response.statusText}`
+      );
+      throw new Error(
+        `Failed to fetch API key: ${response.status} ${response.statusText}`
+      );
     }
 
     let result;
     try {
       result = await response.json();
     } catch (e) {
-      console.error("Error parsing API response");
-      throw new Error("Invalid response format from API endpoint");
+      console.error("Error parsing API key response:", e);
+      throw new Error("Invalid response format from API key endpoint");
     }
+
+    console.log(
+      "API key fetch result:",
+      result.configured ? "Configured" : "Not configured"
+    );
 
     if (!result.key) {
-      console.error("API is not properly configured");
-      throw new Error("API is not properly configured");
+      console.error("API key is empty or not configured");
+      throw new Error("API key is empty or not configured");
     }
 
+    console.log(
+      "Successfully retrieved Deepgram API key with length:",
+      result.key.length
+    );
     return result.key;
   } catch (error) {
-    console.error("Error retrieving API configuration");
+    console.error("Error fetching Deepgram API key:", error);
     throw error;
   }
 };
