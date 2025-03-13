@@ -73,7 +73,7 @@ async function runNetworkTest() {
         test: test.name,
         url: test.url,
         success: false,
-        error: error.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
       });
     }
   }
@@ -118,7 +118,10 @@ async function testApiKey(apiKey: string) {
         };
       } catch (transcriptionError) {
         // Check if the error is authentication related or just bad request
-        const errorMessage = transcriptionError.message || "Unknown error";
+        const errorMessage =
+          transcriptionError instanceof Error
+            ? transcriptionError.message
+            : "Unknown error";
         const isAuthError =
           errorMessage.includes("auth") ||
           errorMessage.includes("key") ||
@@ -136,7 +139,7 @@ async function testApiKey(apiKey: string) {
   } catch (error) {
     return {
       valid: false,
-      error: error.message || "Unknown error",
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }
@@ -238,7 +241,7 @@ export async function GET() {
     return NextResponse.json(
       {
         status: "error",
-        error: error.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
       { status: 500 }
