@@ -8,7 +8,7 @@ import path from "path";
 const execPromise = promisify(exec);
 
 // Function to extract video ID from YouTube URL
-export function extractVideoId(url: string): string | null {
+function extractVideoId(url: string): string | null {
   if (!url) return null;
 
   // Regular expressions for different YouTube URL formats
