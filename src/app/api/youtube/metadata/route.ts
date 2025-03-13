@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
-import { getTranscript } from "youtube-transcript";
+import { YoutubeTranscript } from "youtube-transcript";
 
 // Set dynamic to avoid static optimization for this route
 export const dynamic = "force-dynamic";
@@ -12,15 +12,15 @@ function extractVideoId(url: string): string | null {
   let videoId = null;
 
   try {
-  if (url.includes("youtube.com/watch")) {
-    const urlParams = new URLSearchParams(new URL(url).search);
-    videoId = urlParams.get("v");
-  } else if (url.includes("youtu.be")) {
+    if (url.includes("youtube.com/watch")) {
+      const urlParams = new URLSearchParams(new URL(url).search);
+      videoId = urlParams.get("v");
+    } else if (url.includes("youtu.be")) {
       videoId = url.split("youtu.be/")[1]?.split("?")[0];
-  } else if (url.includes("youtube.com/embed")) {
+    } else if (url.includes("youtube.com/embed")) {
       videoId = url.split("youtube.com/embed/")[1]?.split("?")[0];
-  } else if (url.includes("youtube.com/shorts")) {
-    // Handle YouTube Shorts format
+    } else if (url.includes("youtube.com/shorts")) {
+      // Handle YouTube Shorts format
       videoId = url.split("youtube.com/shorts/")[1]?.split("?")[0];
     }
   } catch (error) {
@@ -76,7 +76,7 @@ async function fetchYouTubeTranscript(
       try {
         // First try with default settings (auto-detect language)
         console.log("Attempting to fetch transcript with auto-detect language");
-        transcript = await getTranscript(videoId);
+        transcript = await YoutubeTranscript.fetchTranscript(videoId);
       } catch (firstError) {
         console.log(
           "First transcript attempt failed, trying with English",
@@ -85,8 +85,7 @@ async function fetchYouTubeTranscript(
 
         try {
           // Then try with English specifically
-          transcript = await getTranscript({
-            videoId: videoId,
+          transcript = await YoutubeTranscript.fetchTranscript(videoId, {
             lang: "en",
           });
         } catch (secondError) {
@@ -96,23 +95,22 @@ async function fetchYouTubeTranscript(
           );
 
           // If both fail, try one more time with a different approach
-          transcript = await getTranscript({
-            videoId: videoId,
+          transcript = await YoutubeTranscript.fetchTranscript(videoId, {
             lang: "en",
             country: "US",
           });
         }
       }
-      
+
       if (transcript && transcript.length > 0) {
         console.log(
           `Successfully fetched ${transcript.length} transcript segments`
         );
-        
+
         // Convert to dialogue segments
         const segments: DialogueSegment[] = [];
         let currentSpeaker = "Speaker A";
-        
+
         // Group transcript items into meaningful segments (combine items that are close together)
         const groupedTranscript = [];
         let currentGroup = {
@@ -120,13 +118,13 @@ async function fetchYouTubeTranscript(
           start: transcript[0].offset / 1000,
           duration: transcript[0].duration / 1000,
         };
-        
+
         for (let i = 1; i < transcript.length; i++) {
           const item = transcript[i];
           const prevItem = transcript[i - 1];
           const timeDiff =
             (item.offset - (prevItem.offset + prevItem.duration)) / 1000;
-          
+
           // If time difference is small, combine with current group
           if (timeDiff < 1.5) {
             currentGroup.text += " " + item.text;
@@ -141,20 +139,20 @@ async function fetchYouTubeTranscript(
             };
           }
         }
-        
+
         // Add the last group
         groupedTranscript.push(currentGroup);
-        
+
         // Create segments from grouped transcript
         for (let i = 0; i < groupedTranscript.length; i++) {
           const group = groupedTranscript[i];
-          
+
           // Switch speakers every 1-2 segments to simulate conversation
           if (i > 0 && i % 2 === 0) {
             currentSpeaker =
               currentSpeaker === "Speaker A" ? "Speaker B" : "Speaker A";
           }
-          
+
           segments.push({
             id: uuidv4(),
             speakerName: currentSpeaker,
@@ -164,7 +162,7 @@ async function fetchYouTubeTranscript(
             vocabularyItems: [],
           });
         }
-        
+
         console.log(
           `Created ${segments.length} dialogue segments from transcript`
         );
@@ -273,7 +271,7 @@ async function fetchYouTubeTranscript(
     } catch (error) {
       console.error("Error in alternative transcript fetch method:", error);
     }
-    
+
     // If youtube-transcript fails, try YouTube Data API
     try {
       // Get video details including captions
@@ -282,27 +280,27 @@ async function fetchYouTubeTranscript(
         "AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM";
       const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${apiKey}`;
       const videoResponse = await fetch(videoDetailsUrl);
-      
+
       if (videoResponse.ok) {
         const videoData = await videoResponse.json();
-        
+
         if (videoData && videoData.items && videoData.items.length > 0) {
           const videoDetails = videoData.items[0];
           const title = videoDetails.snippet.title || "";
           const description = videoDetails.snippet.description || "";
-          
+
           console.log(`Video title: ${title}`);
           console.log(
             `Video description preview: ${description.substring(0, 100)}...`
           );
-          
+
           // Try to extract meaningful sentences from the description
           if (description) {
             const sentences = description
               .split(/[.!?]+/)
               .map((s) => s.trim())
               .filter((s) => s.length > 5 && s.length < 200);
-            
+
             if (sentences.length > 3) {
               console.log(
                 `Created ${sentences.length} segments from video description`
@@ -310,7 +308,7 @@ async function fetchYouTubeTranscript(
               return createSegmentsFromSentences(sentences);
             }
           }
-          
+
           // If we can't get good sentences from description, try the title
           if (title) {
             // Use the title as the first segment
@@ -323,7 +321,7 @@ async function fetchYouTubeTranscript(
               endTime: 5,
               vocabularyItems: [],
             });
-            
+
             // Add some generic follow-up segments related to the title
             const followUpSentences = [
               `Let's talk about ${title}.`,
@@ -332,7 +330,7 @@ async function fetchYouTubeTranscript(
               `What do you think about ${title}?`,
               `There's a lot to learn about ${title}.`,
             ];
-            
+
             for (let i = 0; i < followUpSentences.length; i++) {
               segments.push({
                 id: uuidv4(),
@@ -343,7 +341,7 @@ async function fetchYouTubeTranscript(
                 vocabularyItems: [],
               });
             }
-            
+
             console.log(
               `Created ${segments.length} segments based on video title`
             );
@@ -354,7 +352,7 @@ async function fetchYouTubeTranscript(
     } catch (error) {
       console.error("Error fetching from YouTube Data API:", error);
     }
-    
+
     // If all else fails, create default segments
     console.log("All transcript methods failed, creating default segments");
     return createDefaultSegments(videoId);

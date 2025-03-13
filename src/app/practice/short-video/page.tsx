@@ -138,7 +138,7 @@ export default function ShortVideoPracticePage() {
                       </div>
                       <div className="text-gray-700">{item.definition}</div>
                       <div className="mt-2 text-gray-600 italic">
-                        "{item.example}"
+                        &quot;{item.example}&quot;
                       </div>
                     </div>
                   )

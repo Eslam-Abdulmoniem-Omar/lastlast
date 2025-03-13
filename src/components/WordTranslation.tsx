@@ -114,7 +114,7 @@ export default function WordTranslation({
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex justify-between items-start mb-2">
             <h3 className="font-medium text-gray-900">
-              "{translation.originalWord}"
+              &quot;{translation.originalWord}&quot;
             </h3>
             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
               Our AI{" "}

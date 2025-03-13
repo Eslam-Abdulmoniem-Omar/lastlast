@@ -249,3 +249,15 @@ export const getTranscriptSourceInfo = (transcriptSource: string) => {
     message: getMessage(),
   };
 };
+
+/**
+ * Alias for extractVideoId - used by some components
+ */
+export const extractYouTubeVideoId = extractVideoId;
+
+/**
+ * Generates transcript URL for YouTube videos
+ */
+export const generateTranscriptUrl = (videoId: string): string => {
+  return `/api/youtube/metadata?url=https://www.youtube.com/watch?v=${videoId}&t=${Date.now()}`;
+};

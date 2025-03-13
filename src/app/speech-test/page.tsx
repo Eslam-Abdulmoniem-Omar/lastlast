@@ -210,7 +210,7 @@ export default function SpeechTestPage() {
             </li>
             <li>Speak clearly into your microphone</li>
             <li>
-              Click <strong>Stop Recording</strong> when you're done
+              Click <strong>Stop Recording</strong> when you&apos;re done
             </li>
             <li>Wait for the transcription to appear</li>
             <li>

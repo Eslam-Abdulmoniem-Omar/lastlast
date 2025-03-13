@@ -45,8 +45,8 @@ export default function SpeechRecognizerExample() {
         <div className="bg-yellow-50 p-3 rounded-md">
           <p className="text-sm text-yellow-800">
             Note: If you see a warning about Web Speech API not being supported,
-            your browser doesn't support this feature and we'll use server-side
-            transcription instead.
+            your browser doesn&apos;t support this feature and we&apos;ll use
+            server-side transcription instead.
           </p>
         </div>
       </div>
@@ -62,8 +62,8 @@ export default function SpeechRecognizerExample() {
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4">Try it out</h2>
         <p className="mb-4">
-          Click "Start Recording" and speak into your microphone. When finished,
-          click "Stop Recording" to see the transcription.
+          Click &quot;Start Recording&quot; and speak into your microphone. When
+          finished, click &quot;Stop Recording&quot; to see the transcription.
         </p>
 
         <div className="p-4 bg-white rounded-lg shadow">
@@ -91,17 +91,17 @@ export default function SpeechRecognizerExample() {
         <div className="space-y-4">
           <div className="p-3 bg-gray-50 rounded-md">
             <h3 className="font-medium">Primary Method: Web Speech API</h3>
-            <p>
-              Uses your browser's built-in speech recognition capabilities when
-              available.
+            <p className="text-sm">
+              Uses your browser&apos;s built-in speech recognition capabilities
+              when available.
             </p>
           </div>
 
           <div className="p-3 bg-gray-50 rounded-md">
             <h3 className="font-medium">Fallback Method 1: OpenAI Whisper</h3>
-            <p>
-              If Web Speech API fails or isn't supported, we use OpenAI's
-              Whisper model via server API.
+            <p className="text-sm">
+              If Web Speech API fails or isn&apos;t supported, we use
+              OpenAI&apos;s Whisper model for accurate transcription.
             </p>
           </div>
 

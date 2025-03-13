@@ -105,3 +105,101 @@ const saveUserToFirestore = async (user: User): Promise<void> => {
     console.error("Error saving user data to Firestore:", error);
   }
 };
+
+// Sign in with email and password
+export const signInWithEmail = async (
+  email: string,
+  password: string
+): Promise<User | null> => {
+  try {
+    const { signInWithEmailAndPassword } = await import("firebase/auth");
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    toast.success("Successfully signed in!");
+    return userCredential.user;
+  } catch (error: any) {
+    console.error("Error signing in with email", error);
+
+    if (error.code === "auth/invalid-credential") {
+      toast.error("Invalid email or password. Please try again.");
+    } else if (error.code === "auth/too-many-requests") {
+      toast.error(
+        "Too many failed login attempts. Please try again later or reset your password."
+      );
+    } else {
+      toast.error(error.message || "Failed to sign in");
+    }
+
+    return null;
+  }
+};
+
+// Sign up with email and password
+export const signUpWithEmail = async (
+  email: string,
+  password: string,
+  displayName: string
+): Promise<User | null> => {
+  try {
+    const { createUserWithEmailAndPassword, updateProfile } = await import(
+      "firebase/auth"
+    );
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    const user = userCredential.user;
+
+    // Update profile with display name
+    if (user) {
+      await updateProfile(user, { displayName });
+
+      // Save to Firestore
+      await saveUserToFirestore({
+        ...user,
+        displayName, // Ensure the displayName is included in Firestore
+      });
+    }
+
+    toast.success("Account successfully created!");
+    return user;
+  } catch (error: any) {
+    console.error("Error signing up with email", error);
+
+    if (error.code === "auth/email-already-in-use") {
+      toast.error("Email already in use. Try signing in instead.");
+    } else if (error.code === "auth/weak-password") {
+      toast.error("Password is too weak. Please use a stronger password.");
+    } else {
+      toast.error(error.message || "Failed to create account");
+    }
+
+    return null;
+  }
+};
+
+// Reset password
+export const resetPassword = async (email: string): Promise<boolean> => {
+  try {
+    const { sendPasswordResetEmail } = await import("firebase/auth");
+    await sendPasswordResetEmail(auth, email);
+    toast.success("Password reset email sent! Check your inbox.");
+    return true;
+  } catch (error: any) {
+    console.error("Error resetting password", error);
+
+    if (error.code === "auth/user-not-found") {
+      toast.error("No account found with this email address.");
+    } else if (error.code === "auth/invalid-email") {
+      toast.error("Invalid email address. Please check and try again.");
+    } else {
+      toast.error(error.message || "Failed to send reset email");
+    }
+
+    return false;
+  }
+};

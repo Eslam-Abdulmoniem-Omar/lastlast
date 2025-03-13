@@ -102,7 +102,7 @@ export default function ShortVideoPage() {
                 {error || "Video Not Found"}
               </h1>
               <p className="text-red-600 mb-6">
-                Sorry, we couldn't find the video you're looking for.
+                Sorry, we couldn&apos;t find the video you&apos;re looking for.
               </p>
               <Link
                 href="/short-videos"
