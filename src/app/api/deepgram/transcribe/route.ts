@@ -4,14 +4,10 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 // Configure the API to handle larger file uploads
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "10mb",
-    },
-    responseLimit: false,
-  },
-};
+// The bodyParser config is now handled differently in App Router
+export const maxDuration = 60; // Set maximum duration to 60 seconds
+export const fetchCache = "force-no-store"; // Disable caching
+export const revalidate = 0; // Disable revalidation caching
 
 // Simple validation to check API key availability
 const isApiKeyConfigured = () => {
