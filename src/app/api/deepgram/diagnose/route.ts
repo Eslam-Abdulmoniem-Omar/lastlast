@@ -51,9 +51,22 @@ async function runNetworkTest() {
         success: response.ok,
         statusCode: response.status,
         responseTime: endTime - startTime,
-        headers: Object.fromEntries(
-          [...response.headers.entries()].slice(0, 5)
-        ), // Just first 5 headers
+        headers: (() => {
+          // Convert headers to an object without using spread operator
+          const headerObj: Record<string, string> = {};
+          const headerIterator = response.headers.entries();
+          let count = 0;
+          let result = headerIterator.next();
+
+          while (!result.done && count < 5) {
+            const [key, value] = result.value;
+            headerObj[key] = value;
+            result = headerIterator.next();
+            count++;
+          }
+
+          return headerObj;
+        })(),
       });
     } catch (error) {
       results.push({
