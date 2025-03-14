@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export",
+  // Remove static export as it doesn't support API routes
+  // output: "export", 
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -49,6 +50,11 @@ const nextConfig = {
     ],
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  },
+  // Add this to prevent the warning about Next.js caching
+  experimental: {
+    serverMinification: true,
+    serverSourceMaps: false,
   },
 };
 
