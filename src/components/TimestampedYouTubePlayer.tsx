@@ -13,6 +13,7 @@ import {
   BookOpen,
   X,
   Globe,
+  PlayCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { updateListeningProgress } from "@/lib/firebase/podcastUtils";
@@ -394,6 +395,12 @@ export default function TimestampedYouTubePlayer({
   };
 
   const togglePracticeMode = (mode: PracticeMode) => {
+    // Redirect to vocabulary mode if speaking mode is requested
+    if (mode === "speaking") {
+      setPracticeMode("vocabulary");
+      return;
+    }
+
     setPracticeMode(mode);
 
     // If switching to speaking mode, pause the video
@@ -410,6 +417,9 @@ export default function TimestampedYouTubePlayer({
 
   // Function to handle word click
   const handleWordClick = async (word: string) => {
+    // Pause the video when a word is clicked
+    pauseVideo();
+
     // Clean the word for lookup (lowercase and remove punctuation)
     const cleanWord = word
       .toLowerCase()
@@ -471,6 +481,16 @@ export default function TimestampedYouTubePlayer({
   // Function to close the word details popup
   const closeWordDetails = () => {
     setSelectedWord(null);
+    // We don't resume the video on close - user must click resume button
+  };
+
+  // Function to resume video after viewing translation
+  const resumeVideoPlayback = () => {
+    closeWordDetails();
+    if (playerRef.current && playerReady) {
+      playerRef.current.playVideo();
+      setIsPlaying(true);
+    }
   };
 
   // Add a function to handle clicking on a segment in vocabulary mode
@@ -755,20 +775,14 @@ export default function TimestampedYouTubePlayer({
               />
               <span className="font-medium">Vocabulary</span>
             </button>
-            <button
-              onClick={() => togglePracticeMode("speaking")}
-              className={`flex-1 p-3 flex items-center justify-center space-x-2 transition-all duration-200 ${
-                practiceMode === "speaking"
-                  ? "bg-[#0c1527] text-[#4d7efa] font-bold border-b-2 border-[#4d7efa]"
-                  : "hover:bg-[#0c1527] hover:text-[#4d7efa]"
-              }`}
+            {/* Speaking mode disabled temporarily */}
+            <div
+              className="flex-1 p-3 flex items-center justify-center space-x-2 cursor-not-allowed opacity-50"
+              title="Guided practice mode temporarily disabled"
             >
-              <Mic
-                size={20}
-                className={practiceMode === "speaking" ? "text-[#4d7efa]" : ""}
-              />
-              <span className="font-medium">Guided Practice</span>
-            </button>
+              <Mic size={20} />
+              <span className="font-medium">Speaking (Disabled)</span>
+            </div>
           </div>
         </div>
       </div>
@@ -890,8 +904,8 @@ export default function TimestampedYouTubePlayer({
           </div>
         )}
 
-        {/* Guided Speaking Practice for Speaking mode */}
-        {practiceMode === "speaking" && (
+        {/* Guided Speaking Practice for Speaking mode - temporarily disabled */}
+        {/* {practiceMode === "speaking" && (
           <div className="w-full p-4">
             <GuidedSpeakingPractice
               dialogueLines={dialogueLines}
@@ -910,7 +924,7 @@ export default function TimestampedYouTubePlayer({
               currentTime={currentTime}
             />
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Sentence translation popup */}
@@ -1181,6 +1195,20 @@ export default function TimestampedYouTubePlayer({
                     </div>
                   </div>
                 )}
+
+                {/* Resume video button at bottom of popup */}
+                <div className="mt-8 flex justify-center">
+                  <button
+                    onClick={resumeVideoPlayback}
+                    className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium flex items-center justify-center transition-all group"
+                  >
+                    <PlayCircle
+                      size={20}
+                      className="mr-2 group-hover:scale-110 transition-transform"
+                    />
+                    Resume Video
+                  </button>
+                </div>
               </>
             )}
 

@@ -2,10 +2,22 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import OpenAI from "openai";
 
-const openai = new OpenAI();
+// Initialize the OpenAI client with the API key from .env.local
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+});
 
 export async function POST(req: Request) {
   const body = await req.json();
+
+  // Check if OpenAI API key is configured
+  if (!process.env.OPENAI_API_KEY) {
+    console.error("OPENAI_API_KEY is not configured in environment variables");
+    return NextResponse.json(
+      { error: "OpenAI API key not configured" },
+      { status: 500 }
+    );
+  }
 
   const base64Audio = body.audio;
 

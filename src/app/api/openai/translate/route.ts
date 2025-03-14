@@ -145,10 +145,11 @@ IMPORTANT:
 - The contextual_translation must always be in Arabic.
 - Extract only the **necessary part** of the sentence for 'full_phrase' to provide better understanding.
 - Make sure the meaning_comparison follows this format: كلمة 'X' تعني... ولكن في عبارة 'X Y' تعني...
+- ANY word or phrase that appears in SINGLE quotes (like 'go') or DOUBLE quotes (like "gave up") MUST REMAIN IN ENGLISH and should NOT be translated to Arabic.
+- When mentioning English words or phrases in the Arabic explanation, ALWAYS keep them in their original English form.
 - If the word is part of a phrasal verb (like 'gave up' or 'go on'), ensure that the example uses the full phrasal verb.
 `;
 };
-
 
 export async function POST(req: NextRequest) {
   try {
@@ -199,7 +200,11 @@ Format your response as a JSON object with these exact fields:
     }
   ]
 }
-If no special contextual elements exist, return an empty array for "contextual_elements".
+
+IMPORTANT:
+- If no special contextual elements exist, return an empty array for "contextual_elements".
+- When providing explanations in Arabic, any English words or phrases that appear in single quotes (') or double quotes (") MUST REMAIN IN ENGLISH - do not translate these quoted terms.
+- In explanations, always present English terms in their original form.
 `
       : getWordTranslationPrompt(textToTranslate, context);
 
@@ -211,7 +216,7 @@ If no special contextual elements exist, return an empty array for "contextual_e
           {
             role: "system",
             content:
-              "You are a professional translator specializing in English to Arabic translations, with expertise in idioms, phrases, and contextual meanings.",
+              "You are a professional translator specializing in English to Arabic translations, with expertise in idioms, phrases, and contextual meanings. IMPORTANT: When providing translations, always keep English words and phrases that appear in single quotes (') or double quotes (\") in their original English form. Never translate these quoted terms to Arabic, as they are meant to be recognized as English terms in the translation.",
           },
           {
             role: "user",
