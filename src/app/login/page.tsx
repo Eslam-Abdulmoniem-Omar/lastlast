@@ -7,6 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FcGoogle } from "react-icons/fc";
 import { Home } from "lucide-react";
+import { signInWithGoogleRedirect } from "@/lib/firebase/authService";
 
 export default function LoginPage() {
   const { user, signInWithGoogle, loading } = useAuth();
@@ -30,6 +31,15 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGoogleRedirectSignIn = () => {
+    setIsLoading(true);
+    // We don't need a try/catch here as the redirect will take the user away from this page
+    signInWithGoogleRedirect().catch((error) => {
+      console.error("Error during Google redirect sign in:", error);
+      setIsLoading(false);
+    });
   };
 
   if (loading) {
@@ -131,7 +141,27 @@ export default function LoginPage() {
                   }`}
                 >
                   <FcGoogle className="h-5 w-5 mr-2" />
-                  Sign in with Google
+                  Sign in with Google (Popup)
+                </span>
+              </button>
+
+              <button
+                onClick={handleGoogleRedirectSignIn}
+                disabled={isLoading}
+                className="w-full flex justify-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 relative"
+              >
+                {isLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>
+                  </div>
+                ) : null}
+                <span
+                  className={`flex items-center ${
+                    isLoading ? "opacity-0" : ""
+                  }`}
+                >
+                  <FcGoogle className="h-5 w-5 mr-2" />
+                  Sign in with Google (Redirect)
                 </span>
               </button>
 

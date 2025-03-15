@@ -4,7 +4,11 @@ import React, { createContext, useEffect, useState } from "react";
 import { User } from "firebase/auth";
 import { auth } from "../firebase/firebase";
 import { toast } from "react-hot-toast";
-import { signInWithGoogle, logoutUser } from "../firebase/authService";
+import {
+  signInWithGoogle,
+  logoutUser,
+  handleRedirectResult,
+} from "../firebase/authService";
 
 interface AuthContextType {
   user: User | null;
@@ -24,6 +28,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authInitialized, setAuthInitialized] = useState(false);
+
+  // Handle redirect result on initial load
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const checkRedirectResult = async () => {
+        try {
+          const redirectUser = await handleRedirectResult();
+          if (redirectUser) {
+            console.log("User signed in via redirect:", redirectUser);
+          }
+        } catch (error) {
+          console.error("Error handling redirect result:", error);
+        }
+      };
+
+      checkRedirectResult();
+    }
+  }, []);
 
   useEffect(() => {
     // Set a timeout to prevent indefinite loading state

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node build-script.js",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "install-python-deps": "node src/scripts/install_deps.js"
