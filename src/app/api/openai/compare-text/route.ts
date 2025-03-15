@@ -95,9 +95,9 @@ Only respond with valid JSON.`,
     });
 
     // Parse the response
-    const content = response.choices[0]?.message?.content;
+    const content = response.choices[0].message.content;
     if (!content) {
-      throw new Error("No content returned from OpenAI");
+      throw new Error("OpenAI response content is null or undefined");
     }
     const result = JSON.parse(content);
 
