@@ -1,4 +1,7 @@
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
+export const runtime = "edge";
 
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";

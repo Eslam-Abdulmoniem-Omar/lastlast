@@ -47,12 +47,30 @@ export const convertToEmbedUrl = (url: string): string => {
 
 /**
  * Creates default dialogue segments when a transcript is not available
- * Now returns an empty array to prevent showing generic segments
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
-  console.log("[Utils] createDefaultSegments called - returning empty array");
-  // Return empty array instead of default segments to prevent showing generic content
-  return [];
+  const segments: DialogueSegment[] = [];
+  const segmentDuration = 5;
+  const segmentTexts = [
+    "Welcome to this video.",
+    "Today we'll be discussing an interesting topic.",
+    "I hope you find this content useful.",
+    "Let me know your thoughts in the comments.",
+    "Thank you for watching!",
+  ];
+
+  for (let i = 0; i < segmentTexts.length; i++) {
+    segments.push({
+      id: uuidv4(),
+      speakerName: "",
+      text: segmentTexts[i],
+      startTime: i * segmentDuration,
+      endTime: (i + 1) * segmentDuration,
+      vocabularyItems: [],
+    });
+  }
+
+  return segments;
 };
 
 /**
@@ -62,41 +80,6 @@ export const formatTime = (seconds: number): string => {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-};
-
-// List of known generic segment texts
-const GENERIC_SEGMENT_TEXTS = [
-  "Hello, welcome to this video.",
-  "Today we're going to discuss an interesting topic.",
-  "I hope you find this information useful.",
-  "Let me know what you think in the comments.",
-  "This is an important point to understand.",
-  "Let's break this down step by step.",
-  "First, we need to consider the context.",
-  "Second, we should analyze the details.",
-  "Finally, we can draw some conclusions.",
-  "Thank you for watching this video.",
-  "Welcome to this video.",
-  "Today we'll be discussing an interesting topic.",
-  "I hope you find this content useful.",
-  "Let me know your thoughts in the comments.",
-  "Thank you for watching!",
-];
-
-// Helper function to check if segments are generic
-const areSegmentsGeneric = (segments: DialogueSegment[]): boolean => {
-  if (!segments || segments.length === 0) return true;
-
-  // Check if most segments match our generic patterns
-  const genericCount = segments.filter((segment) =>
-    GENERIC_SEGMENT_TEXTS.some(
-      (genericText) =>
-        segment.text.trim().toLowerCase() === genericText.toLowerCase()
-    )
-  ).length;
-
-  // If more than 50% of segments are generic, consider the whole set generic
-  return genericCount > segments.length * 0.5;
 };
 
 /**
@@ -133,7 +116,7 @@ export const fetchTranscript = async (
 
     // Implementation with retry logic
     const MAX_RETRIES = 2;
-    const TIMEOUT_MS = 8000; // Reducing timeout for Vercel environment
+    const TIMEOUT_MS = 10000; // 10 seconds instead of 30
 
     let lastError = null;
 
@@ -153,24 +136,19 @@ export const fetchTranscript = async (
           console.log("[Utils] Aborting fetch due to timeout");
         }, TIMEOUT_MS);
 
-        // Add better caching prevention with random query param
-        const timestamp = Date.now();
-        const randomBuster = Math.floor(Math.random() * 10000);
+        // Add environment indicator and timestamp to help with debugging
         const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
           url
-        )}&t=${timestamp}&r=${randomBuster}`;
+        )}&t=${Date.now()}`;
 
         console.log("[Utils] Fetching metadata from:", metadataUrl);
 
         const metadataResponse = await fetch(metadataUrl, {
           signal: controller.signal,
           headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Cache-Control": "no-cache",
             Pragma: "no-cache",
-            Expires: "0",
           },
-          // Add next's cache directive for edge cases
-          next: { revalidate: 0 },
         });
 
         // Clear the timeout since the fetch completed
@@ -239,38 +217,12 @@ export const fetchTranscript = async (
           })
         );
 
-        // Verify we have segments with actual content
-        if (metaData.segments && metaData.segments.length > 0) {
-          // Check if segments are generic
-          if (areSegmentsGeneric(metaData.segments)) {
-            console.warn(
-              "[Utils] Detected generic segments, returning empty array"
-            );
-            metaData.segments = [];
-            metaData.transcriptSource = "unavailable";
-
-            toast.dismiss();
-            toast.error(
-              "Could not retrieve actual transcript. You'll need to add segments manually."
-            );
-
-            if (attempt < MAX_RETRIES) {
-              continue; // Try again if we have retries left
-            }
-          }
-        }
-
         // Process the response
         const responseData = {
           title: metaData.title || "",
           embedUrl: metaData.embedUrl || "",
           segments: metaData.segments || [],
-          transcriptSource:
-            metaData.segments && metaData.segments.length > 0
-              ? metaData.transcriptSource
-              : "unavailable",
-          duration: metaData.duration || 0,
-          isTooLong: metaData.isTooLong || false,
+          transcriptSource: metaData.transcriptSource || "transcript",
         };
 
         if (callbacks.onSuccess) {
