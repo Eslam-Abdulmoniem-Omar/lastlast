@@ -271,7 +271,7 @@ IMPORTANT:
 
           // Calculate estimated durations based on text length
           const totalTextLength = validSegments.reduce(
-            (sum, segment) => sum + segment.text.length,
+            (sum: number, segment) => sum + segment.text.length,
             0
           );
 
@@ -1056,7 +1056,7 @@ export async function GET(request: Request) {
             // Check for varied segment lengths
             const textLengths = segments.map((seg) => seg.text.length);
             const avgLength =
-              textLengths.reduce((sum, len) => sum + len, 0) /
+              textLengths.reduce((sum: number, len) => sum + len, 0) /
               textLengths.length;
             const hasVariedLengths = textLengths.some(
               (len) => Math.abs(len - avgLength) > 10
