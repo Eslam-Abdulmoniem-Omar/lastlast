@@ -204,8 +204,27 @@ IMPORTANT:
         max_tokens: 2000,
       });
 
+      console.log(
+        "OpenAI API Raw Response (truncated):",
+        JSON.stringify(
+          {
+            ...response,
+            choices: response.choices?.map((c) => ({
+              ...c,
+              message: {
+                ...c.message,
+                content: c.message?.content?.substring(0, 100) + "...", // Truncate to avoid large logs
+              },
+            })),
+          },
+          null,
+          2
+        )
+      );
+
       // Parse the response with better error handling
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = response.choices?.[0]?.message?.content?.trim() || "{}";
+
       if (!content) {
         console.error("Empty response from GPT");
         return [];
