@@ -1,15 +1,11 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { YoutubeTranscript } from "youtube-transcript";
 import { OpenAI } from "openai";
 import axios from "axios";
-
-// Set dynamic to force runtime execution for each request
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
-export const runtime = "edge";
 
 // Set a longer timeout for the API function (config is handled differently in App Router)
 export const maxDuration = 60; // 60 seconds maximum duration
@@ -76,7 +72,7 @@ async function fetchVideoMetadata(videoId: string) {
       // First try to get video details including duration using YouTube API
       const apiKey =
         process.env.YOUTUBE_API_KEY ||
-        "AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM";
+        "AIzaSyBc_9DZAQrhUsbPvGa6WkGO3mUWprHGjj0";
       const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${apiKey}`;
 
       try {
@@ -1031,7 +1027,7 @@ async function fetchYouTubeTranscript(
 
       const apiKey =
         process.env.YOUTUBE_API_KEY ||
-        "AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM";
+        "AIzaSyBc_9DZAQrhUsbPvGa6WkGO3mUWprHGjj0";
       const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
 
       const videoResponse = await fetch(videoDetailsUrl, {
