@@ -64,6 +64,41 @@ export const formatTime = (seconds: number): string => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
+// List of known generic segment texts
+const GENERIC_SEGMENT_TEXTS = [
+  "Hello, welcome to this video.",
+  "Today we're going to discuss an interesting topic.",
+  "I hope you find this information useful.",
+  "Let me know what you think in the comments.",
+  "This is an important point to understand.",
+  "Let's break this down step by step.",
+  "First, we need to consider the context.",
+  "Second, we should analyze the details.",
+  "Finally, we can draw some conclusions.",
+  "Thank you for watching this video.",
+  "Welcome to this video.",
+  "Today we'll be discussing an interesting topic.",
+  "I hope you find this content useful.",
+  "Let me know your thoughts in the comments.",
+  "Thank you for watching!",
+];
+
+// Helper function to check if segments are generic
+const areSegmentsGeneric = (segments: DialogueSegment[]): boolean => {
+  if (!segments || segments.length === 0) return true;
+
+  // Check if most segments match our generic patterns
+  const genericCount = segments.filter((segment) =>
+    GENERIC_SEGMENT_TEXTS.some(
+      (genericText) =>
+        segment.text.trim().toLowerCase() === genericText.toLowerCase()
+    )
+  ).length;
+
+  // If more than 50% of segments are generic, consider the whole set generic
+  return genericCount > segments.length * 0.5;
+};
+
 /**
  * Fetches transcript data from the YouTube API with improved error handling and retry logic
  */
@@ -206,35 +241,21 @@ export const fetchTranscript = async (
 
         // Verify we have segments with actual content
         if (metaData.segments && metaData.segments.length > 0) {
-          // Check that we don't have empty or generic segments
-          const hasRealContent = metaData.segments.some(
-            (segment: DialogueSegment) =>
-              segment.text &&
-              segment.text.length > 10 &&
-              ![
-                "Welcome to this video.",
-                "Today we'll be discussing an interesting topic.",
-                "I hope you find this content useful.",
-                "Let me know your thoughts in the comments.",
-                "Thank you for watching!",
-              ].includes(segment.text.trim())
-          );
-
-          if (!hasRealContent) {
+          // Check if segments are generic
+          if (areSegmentsGeneric(metaData.segments)) {
             console.warn(
-              "[Utils] Segments look like generic placeholders, retrying..."
+              "[Utils] Detected generic segments, returning empty array"
             );
-            if (attempt < MAX_RETRIES) {
-              continue; // Try again
-            } else {
-              // If we've exhausted retries, return empty segments
-              metaData.segments = [];
-              metaData.transcriptSource = "unavailable";
+            metaData.segments = [];
+            metaData.transcriptSource = "unavailable";
 
-              toast.dismiss();
-              toast.error(
-                "Could not retrieve transcript. You'll need to add segments manually."
-              );
+            toast.dismiss();
+            toast.error(
+              "Could not retrieve actual transcript. You'll need to add segments manually."
+            );
+
+            if (attempt < MAX_RETRIES) {
+              continue; // Try again if we have retries left
             }
           }
         }
@@ -244,7 +265,10 @@ export const fetchTranscript = async (
           title: metaData.title || "",
           embedUrl: metaData.embedUrl || "",
           segments: metaData.segments || [],
-          transcriptSource: metaData.transcriptSource || "transcript",
+          transcriptSource:
+            metaData.segments && metaData.segments.length > 0
+              ? metaData.transcriptSource
+              : "unavailable",
           duration: metaData.duration || 0,
           isTooLong: metaData.isTooLong || false,
         };

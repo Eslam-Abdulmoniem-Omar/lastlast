@@ -526,6 +526,57 @@ function mapGptSegmentsToTiming(
   return mappedSegments;
 }
 
+// Helper function to check if segments are generic
+const isGenericSegment = (text: string): boolean => {
+  const genericPatterns = [
+    "Hello, welcome to this video",
+    "Today we're going to discuss",
+    "I hope you find this",
+    "Let me know what you think",
+    "Thank you for watching",
+    "This is an important point",
+    "Let's break this down",
+    "First, we need to consider",
+    "Second, we should analyze",
+    "Finally, we can draw",
+  ];
+
+  return genericPatterns.some((pattern) =>
+    text.toLowerCase().includes(pattern.toLowerCase())
+  );
+};
+
+// Helper function to validate segments
+const validateSegments = (
+  segments: Array<
+    DialogueSegment | { text: string; startTime: number; duration: number }
+  >
+): boolean => {
+  if (!segments || segments.length === 0) return false;
+
+  // Check if most segments are generic
+  const genericCount = segments.filter((segment) => {
+    const text = "text" in segment ? segment.text : "";
+    return isGenericSegment(text);
+  }).length;
+
+  // If more than 50% are generic, consider it invalid
+  return genericCount <= segments.length * 0.5;
+};
+
+// Convert raw segment to DialogueSegment
+const convertToDialogueSegment = (
+  raw: { text: string; startTime: number; duration: number },
+  speakerName: string = "Speaker A"
+): DialogueSegment => ({
+  id: uuidv4(),
+  speakerName,
+  text: raw.text,
+  startTime: raw.startTime,
+  endTime: raw.startTime + raw.duration,
+  vocabularyItems: [],
+});
+
 // Fetch transcript data using multiple methods with fallbacks
 async function fetchYouTubeTranscript(
   videoId: string,
@@ -637,56 +688,73 @@ async function fetchYouTubeTranscript(
                     };
                   });
 
-                  // If we have OpenAI, try to process with GPT
-                  if (isOpenAIConfigured() && rawSegments.length > 0) {
-                    try {
-                      const combinedText = rawSegments
-                        .map((seg: { text: string }) => seg.text)
-                        .join(" ");
-                      const originalTimingData = rawSegments.map(
-                        (item: {
-                          text: string;
-                          startTime: number;
-                          duration: number;
-                        }) => ({
-                          text: item.text,
-                          startTime: item.startTime,
-                          endTime: item.startTime + item.duration,
-                        })
-                      );
+                  // Validate segments before processing
+                  if (rawSegments.length > 0) {
+                    // Convert raw segments to DialogueSegments for validation
+                    const dialogueSegments = rawSegments.map((seg, i) =>
+                      convertToDialogueSegment(
+                        seg,
+                        i % 2 === 0 ? "Speaker A" : "Speaker B"
+                      )
+                    );
 
-                      const gptSegments = await processTranscriptWithGPT(
-                        combinedText,
-                        videoTitle,
-                        originalTimingData
-                      );
+                    if (validateSegments(dialogueSegments)) {
+                      // Process with GPT if available
+                      if (isOpenAIConfigured()) {
+                        try {
+                          const combinedText = dialogueSegments
+                            .map((seg: DialogueSegment) => seg.text)
+                            .join(" ");
+                          const originalTimingData = dialogueSegments.map(
+                            (item: DialogueSegment) => ({
+                              text: item.text,
+                              startTime: item.startTime,
+                              endTime: item.endTime,
+                            })
+                          );
 
-                      if (gptSegments.length > 0) {
-                        console.log(
-                          "[API] Using GPT-processed segments from Innertube API"
-                        );
-                        return {
-                          segments: gptSegments,
-                          source: "transcript",
-                        };
+                          const gptSegments = await processTranscriptWithGPT(
+                            combinedText,
+                            videoTitle,
+                            originalTimingData
+                          );
+
+                          if (gptSegments.length > 0) {
+                            console.log(
+                              "[API] Using GPT-processed segments from Innertube API"
+                            );
+                            return {
+                              segments: gptSegments,
+                              source: "transcript",
+                            };
+                          }
+                        } catch (gptError) {
+                          console.error(
+                            "[API] Error processing with GPT, falling back:",
+                            gptError
+                          );
+                        }
                       }
-                    } catch (gptError) {
-                      console.error(
-                        "[API] Error processing with GPT, falling back:",
-                        gptError
+
+                      // Fallback to simple segmentation if GPT processing fails
+                      console.log(
+                        "[API] Using simple segmentation from Innertube API"
                       );
+                      const segments = createSimpleSegments(rawSegments);
+                      return {
+                        segments,
+                        source: "transcript",
+                      };
+                    } else {
+                      console.log(
+                        "[API] Segments appear to be generic or invalid"
+                      );
+                      return {
+                        segments: [],
+                        source: "unavailable",
+                      };
                     }
                   }
-
-                  // Fallback to simple segmentation if GPT processing fails
-                  console.log(
-                    "[API] Using simple segmentation from Innertube API"
-                  );
-                  const segments = createSimpleSegments(rawSegments);
-                  return {
-                    segments,
-                    source: "transcript",
-                  };
                 }
               } catch (captionError) {
                 console.error("[API] Error fetching captions:", captionError);
@@ -908,111 +976,114 @@ async function fetchYouTubeTranscript(
                 }
               }
 
-              // If we have OpenAI, try to process with GPT
-              if (isOpenAIConfigured() && rawSegments.length > 0) {
-                try {
-                  const combinedText = rawSegments
-                    .map((seg) => seg.text)
-                    .join(" ");
+              // Validate segments before processing
+              if (rawSegments.length > 0 && validateSegments(rawSegments)) {
+                // Process with GPT if available
+                if (isOpenAIConfigured() && rawSegments.length > 0) {
+                  try {
+                    const combinedText = rawSegments
+                      .map((seg) => seg.text)
+                      .join(" ");
 
-                  const originalTimingData = rawSegments.map((item) => ({
-                    text: item.text,
-                    startTime: item.startTime,
-                    endTime: item.startTime + item.duration,
-                  }));
+                    const originalTimingData = rawSegments.map((item) => ({
+                      text: item.text,
+                      startTime: item.startTime,
+                      endTime: item.startTime + item.duration,
+                    }));
 
-                  const gptSegments = await processTranscriptWithGPT(
-                    combinedText,
-                    videoTitle,
-                    originalTimingData
-                  );
-
-                  if (gptSegments.length > 0) {
-                    console.log(
-                      "[API] Using GPT-processed segments from caption XML"
+                    const gptSegments = await processTranscriptWithGPT(
+                      combinedText,
+                      videoTitle,
+                      originalTimingData
                     );
-                    return {
-                      segments: gptSegments,
-                      source: "transcript",
-                    };
-                  }
-                } catch (gptError) {
-                  console.error(
-                    "[API] Error processing XML data with GPT:",
-                    gptError
-                  );
-                }
-              }
 
-              // Group raw segments into meaningful chunks
-              if (rawSegments.length > 0) {
-                const groupedSegments: Array<{
-                  text: string;
-                  startTime: number;
-                  duration: number;
-                }> = [];
-                let currentGroup = {
-                  text: rawSegments[0].text,
-                  startTime: rawSegments[0].startTime,
-                  duration: rawSegments[0].duration,
-                };
-
-                const TIME_THRESHOLD = 0.7;
-                const MAX_SEGMENT_LENGTH = 150;
-
-                for (let i = 1; i < rawSegments.length; i++) {
-                  const current = rawSegments[i];
-                  const prev = rawSegments[i - 1];
-                  const timeDiff =
-                    current.startTime - (prev.startTime + prev.duration);
-                  const wouldExceedLength =
-                    (currentGroup.text + " " + current.text).length >
-                    MAX_SEGMENT_LENGTH;
-
-                  if (timeDiff < TIME_THRESHOLD && !wouldExceedLength) {
-                    currentGroup.text += " " + current.text;
-                    currentGroup.duration += current.duration;
-                  } else {
-                    groupedSegments.push(currentGroup);
-                    currentGroup = {
-                      text: current.text,
-                      startTime: current.startTime,
-                      duration: current.duration,
-                    };
+                    if (gptSegments.length > 0) {
+                      console.log(
+                        "[API] Using GPT-processed segments from caption XML"
+                      );
+                      return {
+                        segments: gptSegments,
+                        source: "transcript",
+                      };
+                    }
+                  } catch (gptError) {
+                    console.error(
+                      "[API] Error processing XML data with GPT:",
+                      gptError
+                    );
                   }
                 }
 
-                groupedSegments.push(currentGroup);
+                // Group raw segments into meaningful chunks
+                if (rawSegments.length > 0) {
+                  const groupedSegments: Array<{
+                    text: string;
+                    startTime: number;
+                    duration: number;
+                  }> = [];
+                  let currentGroup = {
+                    text: rawSegments[0].text,
+                    startTime: rawSegments[0].startTime,
+                    duration: rawSegments[0].duration,
+                  };
 
-                // Create dialogue segments
-                const segments: DialogueSegment[] = [];
-                let currentSpeaker = "Speaker A";
+                  const TIME_THRESHOLD = 0.7;
+                  const MAX_SEGMENT_LENGTH = 150;
 
-                groupedSegments.forEach((group, index) => {
-                  if (index > 0 && index % 2 === 0) {
-                    currentSpeaker =
-                      currentSpeaker === "Speaker A"
-                        ? "Speaker B"
-                        : "Speaker A";
+                  for (let i = 1; i < rawSegments.length; i++) {
+                    const current = rawSegments[i];
+                    const prev = rawSegments[i - 1];
+                    const timeDiff =
+                      current.startTime - (prev.startTime + prev.duration);
+                    const wouldExceedLength =
+                      (currentGroup.text + " " + current.text).length >
+                      MAX_SEGMENT_LENGTH;
+
+                    if (timeDiff < TIME_THRESHOLD && !wouldExceedLength) {
+                      currentGroup.text += " " + current.text;
+                      currentGroup.duration += current.duration;
+                    } else {
+                      groupedSegments.push(currentGroup);
+                      currentGroup = {
+                        text: current.text,
+                        startTime: current.startTime,
+                        duration: current.duration,
+                      };
+                    }
                   }
 
-                  segments.push({
-                    id: uuidv4(),
-                    speakerName: currentSpeaker,
-                    text: group.text,
-                    startTime: group.startTime,
-                    endTime: group.startTime + group.duration,
-                    vocabularyItems: [],
+                  groupedSegments.push(currentGroup);
+
+                  // Create dialogue segments
+                  const segments: DialogueSegment[] = [];
+                  let currentSpeaker = "Speaker A";
+
+                  groupedSegments.forEach((group, index) => {
+                    if (index > 0 && index % 2 === 0) {
+                      currentSpeaker =
+                        currentSpeaker === "Speaker A"
+                          ? "Speaker B"
+                          : "Speaker A";
+                    }
+
+                    segments.push({
+                      id: uuidv4(),
+                      speakerName: currentSpeaker,
+                      text: group.text,
+                      startTime: group.startTime,
+                      endTime: group.startTime + group.duration,
+                      vocabularyItems: [],
+                    });
                   });
-                });
 
-                console.log(
-                  `[API] Created ${segments.length} segments from direct scraping`
-                );
-                return {
-                  segments,
-                  source: "transcript",
-                };
+                  console.log(
+                    `[API] Created ${segments.length} segments from direct scraping`
+                  );
+                  return {
+                    segments,
+                    source: "transcript",
+                  };
+                }
               }
             }
           }
@@ -1079,9 +1150,9 @@ async function fetchYouTubeTranscript(
       console.error("[API] Description fallback failed:", descriptionError);
     }
 
-    // Method 5: Fallback to empty segments rather than generic ones
+    // Method 5: Return empty segments instead of fallback
     console.log(
-      "[API] All transcript methods failed - DO NOT use default segments"
+      "[API] All transcript methods failed - returning empty segments"
     );
     return {
       segments: [],
@@ -1292,14 +1363,20 @@ export async function GET(request: Request) {
         metadata.title
       );
 
+      // Validate the segments
       const segments = transcriptResult.segments;
-      const transcriptSource = transcriptResult.source;
+      const transcriptSource = validateSegments(segments)
+        ? transcriptResult.source
+        : "unavailable";
+
+      // If segments are invalid, return empty array
+      const finalSegments = validateSegments(segments) ? segments : [];
 
       // Log completion information
       const responseTime = Date.now() - startTime;
       console.log(`[API] Request completed in ${responseTime}ms`);
       console.log(`[API] Transcript source: ${transcriptSource}`);
-      console.log(`[API] Segments count: ${segments.length}`);
+      console.log(`[API] Segments count: ${finalSegments.length}`);
 
       // Return the response with appropriate headers to prevent caching
       return new NextResponse(
@@ -1312,7 +1389,7 @@ export async function GET(request: Request) {
               metadata.thumbnail_url ||
               `https://img.youtube.com/vi/${videoId}/0.jpg`,
             embedUrl,
-            segments,
+            segments: finalSegments,
             transcriptSource,
             duration: metadata.duration || 0,
           },
