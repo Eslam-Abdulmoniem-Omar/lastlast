@@ -1,4 +1,4 @@
 {
   "version": 2,
-  "buildCommand": "yarn build"
+  "buildCommand": "chmod +x vercel-build.sh && ./vercel-build.sh"
 }
