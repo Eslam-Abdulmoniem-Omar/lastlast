@@ -3,14 +3,7 @@ import path from "path";
 import { extractVideoId } from "@/lib/utils/youtubeUtils";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
-// Import the wrapper function
 import { executePythonScript } from "@/scripts/youtube_wrapper";
-
-// Route segment configuration
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
-export const runtime = "edge";
 
 // Define types for the Python script result
 interface TranscriptSegment {
@@ -69,40 +62,16 @@ async function verifyPythonSetup(): Promise<boolean> {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { videoId: string; lang: string } }
+) {
   try {
-    // Extract the YouTube URL from the query parameters
-    const url = request.nextUrl.searchParams.get("url");
-    const lang = request.nextUrl.searchParams.get("lang") || "en";
+    const { videoId, lang } = params;
+    const url = `https://www.youtube.com/shorts/${videoId}`;
     const debug = request.nextUrl.searchParams.get("debug") === "true";
 
-    console.log("Received shorts transcript request for URL:", url);
-
-    if (!url) {
-      return NextResponse.json(
-        { error: "YouTube URL is required" },
-        { status: 400 }
-      );
-    }
-
-    // Verify this is a YouTube Shorts URL
-    if (!url.includes("youtube.com/shorts/")) {
-      return NextResponse.json(
-        { error: "URL must be a YouTube Shorts link" },
-        { status: 400 }
-      );
-    }
-
-    // Extract the video ID from the URL
-    const videoId = extractVideoId(url);
-    console.log("Extracted video ID:", videoId);
-
-    if (!videoId) {
-      return NextResponse.json(
-        { error: "Invalid YouTube URL" },
-        { status: 400 }
-      );
-    }
+    console.log("Received shorts transcript request for videoId:", videoId);
 
     // Verify Python setup
     console.log("Verifying Python setup...");
@@ -119,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     try {
       // Try to get transcript using the wrapper
-      console.log(`Attempting to get transcript for URL: ${url}`);
+      console.log(`Attempting to get transcript for videoId: ${videoId}`);
       const result = (await executePythonScript(
         "transcript",
         url,
@@ -254,7 +223,7 @@ export async function GET(request: NextRequest) {
           video_data: {
             title: `YouTube Video (${videoId})`,
             duration: 30,
-            thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            thumbnail: `https://img.youtube.com/vi/${videoId}/0.jpg`,
             url: url,
             webpage_url: url,
             description: "",
@@ -265,14 +234,10 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("Error in shorts transcript API:", error);
 
-    // Get debug value from request
-    const debug = request.nextUrl.searchParams.get("debug") === "true";
-
     return NextResponse.json(
       {
-        error: "Failed to fetch transcript",
-        message: error.message,
-        debug: debug ? { error: error.toString() } : undefined,
+        error: "Failed to process request",
+        details: error.message,
       },
       { status: 500 }
     );

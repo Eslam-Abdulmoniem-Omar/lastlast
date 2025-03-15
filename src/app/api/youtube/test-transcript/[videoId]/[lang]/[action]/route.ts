@@ -5,20 +5,13 @@ import { promisify } from "util";
 
 const execPromise = promisify(exec);
 
-// Route segment configuration
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
-export const runtime = "nodejs"; // Using nodejs runtime since we need child_process
-
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { videoId: string; lang: string; action: string } }
+) {
   try {
-    // Extract the YouTube URL from the query parameters
-    const url =
-      request.nextUrl.searchParams.get("url") ||
-      "https://www.youtube.com/watch?v=dQw4w9WgXcQ"; // Default to a known video
-    const lang = request.nextUrl.searchParams.get("lang") || "en";
-    const action = request.nextUrl.searchParams.get("action") || "transcript";
+    const { videoId, lang, action } = params;
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
 
     // Path to the Python script
     const scriptPath = path.join(
@@ -30,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     try {
       console.log(
-        `Running Python test with action: ${action}, url: ${url}, lang: ${lang}`
+        `Running Python test with action: ${action}, videoId: ${videoId}, lang: ${lang}`
       );
 
       // Execute the Python script directly
@@ -45,7 +38,7 @@ export async function GET(request: NextRequest) {
       // Return the raw output from Python script for debugging
       return NextResponse.json({
         action,
-        url,
+        videoId,
         lang,
         stdout: JSON.parse(stdout),
         stderr: stderr || null,
