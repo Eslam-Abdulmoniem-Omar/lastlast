@@ -31,44 +31,6 @@ function extractVideoId(url: string): string | null {
   return videoId;
 }
 
-// Create default segments for any video
-function createDefaultSegments(): DialogueSegment[] {
-  // Create segments with generic content
-  const segments: DialogueSegment[] = [];
-  const segmentDuration = 5;
-  const numberOfSegments = 10;
-
-  const sentences = [
-    "Hello, welcome to this video.",
-    "Today we're going to discuss an interesting topic.",
-    "I hope you find this information useful.",
-    "Let me know what you think in the comments.",
-    "This is an important point to understand.",
-    "Let's break this down step by step.",
-    "First, we need to consider the context.",
-    "Second, we should analyze the details.",
-    "Finally, we can draw some conclusions.",
-    "Thank you for watching this video.",
-  ];
-
-  for (let i = 0; i < numberOfSegments; i++) {
-    const startTime = i * segmentDuration;
-    const endTime = (i + 1) * segmentDuration;
-    const speakerName = i % 2 === 0 ? "Speaker A" : "Speaker B";
-
-    segments.push({
-      id: uuidv4(),
-      speakerName,
-      text: sentences[i],
-      startTime,
-      endTime,
-      vocabularyItems: [],
-    });
-  }
-
-  return segments;
-}
-
 export async function GET(request: Request) {
   // Move searchParams access outside the try/catch block
   const { searchParams } = new URL(request.url);
@@ -93,15 +55,12 @@ export async function GET(request: Request) {
       );
     }
 
-    // For this simpler version, we'll just return default segments
-    const segments = createDefaultSegments();
-
-    // Return the result
+    // Return empty segments instead of default ones
     return NextResponse.json({
       data: {
         videoId,
-        segments,
-        transcriptSource: "default",
+        segments: [],
+        transcriptSource: "unavailable",
       },
     });
   } catch (error) {

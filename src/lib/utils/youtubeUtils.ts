@@ -49,28 +49,8 @@ export const convertToEmbedUrl = (url: string): string => {
  * Creates default dialogue segments when a transcript is not available
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
-  const segments: DialogueSegment[] = [];
-  const segmentDuration = 5;
-  const segmentTexts = [
-    "Welcome to this video.",
-    "Today we'll be discussing an interesting topic.",
-    "I hope you find this content useful.",
-    "Let me know your thoughts in the comments.",
-    "Thank you for watching!",
-  ];
-
-  for (let i = 0; i < segmentTexts.length; i++) {
-    segments.push({
-      id: uuidv4(),
-      speakerName: "",
-      text: segmentTexts[i],
-      startTime: i * segmentDuration,
-      endTime: (i + 1) * segmentDuration,
-      vocabularyItems: [],
-    });
-  }
-
-  return segments;
+  // Return empty array instead of default segments
+  return [];
 };
 
 /**
