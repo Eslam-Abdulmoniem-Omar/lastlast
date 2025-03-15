@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractYouTubeVideoId } from "@/lib/utils/youtubeUtils";
 import { createClient } from "@deepgram/sdk";
 
-// Initialize Deepgram client
-const deepgramApiKey = process.env.DEEPGRAM_API_KEY || "";
-const deepgram = createClient(deepgramApiKey);
-
 export async function GET(
   request: NextRequest,
   { params }: { params: { videoId: string } }
@@ -19,6 +15,10 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    // Initialize Deepgram client inside the handler function
+    const deepgramApiKey = process.env.DEEPGRAM_API_KEY || "";
+    const deepgram = deepgramApiKey ? createClient(deepgramApiKey) : null;
 
     // First try to get transcript from YouTube API if API key is available
     const youtubeApiKey = process.env.YOUTUBE_API_KEY;
@@ -39,6 +39,14 @@ export async function GET(
 
     // Use Deepgram to transcribe the audio
     try {
+      // Check if deepgram client is initialized
+      if (!deepgram) {
+        return NextResponse.json(
+          { error: "Deepgram API key is not configured" },
+          { status: 500 }
+        );
+      }
+
       const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
         {
           url: audioUrl,
