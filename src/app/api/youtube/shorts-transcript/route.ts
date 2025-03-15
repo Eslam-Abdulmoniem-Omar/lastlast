@@ -6,6 +6,12 @@ import { v4 as uuidv4 } from "uuid";
 // Import the wrapper function
 import { executePythonScript } from "@/scripts/youtube_wrapper";
 
+// Route segment configuration
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
+export const runtime = "edge";
+
 // Define types for the Python script result
 interface TranscriptSegment {
   text: string;

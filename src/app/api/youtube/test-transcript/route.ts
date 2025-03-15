@@ -5,6 +5,12 @@ import { promisify } from "util";
 
 const execPromise = promisify(exec);
 
+// Route segment configuration
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
+export const runtime = "nodejs"; // Using nodejs runtime since we need child_process
+
 export async function GET(request: NextRequest) {
   try {
     // Extract the YouTube URL from the query parameters
