@@ -9,7 +9,6 @@ import { v4 as uuidv4 } from "uuid";
 import { YoutubeTranscript } from "youtube-transcript";
 import { OpenAI } from "openai";
 import axios from "axios";
-import YoutubeMetadata from "@/lib/youtube-metadata";
 
 // Set a longer timeout for the API function (config is handled differently in App Router)
 export const maxDuration = 60; // 60 seconds maximum duration
