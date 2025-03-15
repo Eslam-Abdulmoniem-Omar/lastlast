@@ -49,6 +49,12 @@ export const convertToEmbedUrl = (url: string): string => {
  * Creates default dialogue segments when a transcript is not available
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
+  // Return an empty array instead of default segments
+  // This will prevent the app from showing placeholder text
+  return [];
+
+  // Old implementation commented out
+  /*
   const segments: DialogueSegment[] = [];
   const segmentDuration = 5;
   const segmentTexts = [
@@ -71,6 +77,7 @@ export const createDefaultSegments = (): DialogueSegment[] => {
   }
 
   return segments;
+  */
 };
 
 /**
@@ -211,43 +218,34 @@ export const saveTemporaryPracticeData = (data: {
 };
 
 /**
- * Get transcript source information styling and message
+ * Returns appropriate info for the transcript source display
  */
-export const getTranscriptSourceInfo = (transcriptSource: string) => {
-  const getColorClass = () => {
-    switch (transcriptSource) {
-      case "transcript":
-        return "text-green-700 bg-green-50";
-      case "transcript-processed":
-        return "text-green-700 bg-green-50";
-      case "description":
-        return "text-blue-700 bg-blue-50";
-      case "title":
-        return "text-yellow-700 bg-yellow-50";
-      default:
-        return "text-gray-700 bg-gray-50";
-    }
-  };
-
-  const getMessage = () => {
-    switch (transcriptSource) {
-      case "transcript":
-        return "These segments contain the actual transcript from the video with accurate timestamps.";
-      case "transcript-processed":
-        return "These segments contain the actual transcript from the video, processed by AI for better sentence breaks and timestamps.";
-      case "description":
-        return "These segments are created from the video description since a transcript wasn't available.";
-      case "title":
-        return "These segments are based on the video title since a transcript wasn't available.";
-      default:
-        return "No transcript was available for this video, so generated segments were created.";
-    }
-  };
-
-  return {
-    colorClass: getColorClass(),
-    message: getMessage(),
-  };
+export const getTranscriptSourceInfo = (source: string) => {
+  switch (source) {
+    case "transcript":
+      return {
+        message:
+          "This transcript was sourced directly from YouTube captions. The segments may require some editing for accuracy.",
+        colorClass: "bg-green-50 text-green-700 border border-green-200",
+      };
+    case "default":
+      return {
+        message:
+          "No transcript was available for this video. Using default segments that you should edit.",
+        colorClass: "bg-yellow-50 text-yellow-700 border border-yellow-200",
+      };
+    case "unavailable":
+      return {
+        message:
+          "No transcript could be found for this video. Please add dialogue segments manually.",
+        colorClass: "bg-red-50 text-red-700 border border-red-200",
+      };
+    default:
+      return {
+        message: "Transcript source unknown.",
+        colorClass: "bg-gray-50 text-gray-700 border border-gray-200",
+      };
+  }
 };
 
 /**

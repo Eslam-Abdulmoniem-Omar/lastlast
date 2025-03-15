@@ -952,6 +952,12 @@ function createSegmentsFromSentences(sentences: string[]): DialogueSegment[] {
 function createDefaultSegments(videoId: string): DialogueSegment[] {
   console.log("Creating default segments for video:", videoId);
 
+  // Return an empty array instead of default segments
+  // This will force the client to handle the case where no transcript is available
+  return [];
+
+  // Old code commented out
+  /*
   // Create 10 segments of 5 seconds each (50 seconds total)
   const segments: DialogueSegment[] = [];
   const segmentDuration = 5;
@@ -987,6 +993,7 @@ function createDefaultSegments(videoId: string): DialogueSegment[] {
 
   console.log(`Created ${segments.length} default segments`);
   return segments;
+  */
 }
 
 export async function GET(request: Request) {
@@ -1032,15 +1039,14 @@ export async function GET(request: Request) {
       } catch (transcriptErr) {
         console.error("Error fetching transcript:", transcriptErr);
         transcriptError = `${transcriptErr}`;
-        // Fall back to default segments
-        segments = createDefaultSegments(videoId);
+        // Don't create default segments, just leave as empty array
+        segments = [];
       }
 
       console.log(`Returning ${segments.length} segments for video ${videoId}`);
 
-      // IMPROVED: Better transcript source detection logic
-      // Determine if we got a real transcript or are using generated segments
-      let transcriptSource = "default";
+      // Update transcript source detection logic
+      let transcriptSource = "unavailable";
       if (segments.length > 0) {
         // If we have OpenAI-processed segments, always mark as transcript
         if (isOpenAIConfigured()) {
@@ -1088,8 +1094,7 @@ export async function GET(request: Request) {
     } catch (processingError) {
       console.error("Error processing video data:", processingError);
 
-      // Return fallback data with default segments
-      const fallbackSegments = createDefaultSegments(videoId);
+      // Return fallback data with empty segments array
       return NextResponse.json({
         data: {
           videoId,
@@ -1097,8 +1102,8 @@ export async function GET(request: Request) {
           author: "Unknown Creator",
           thumbnailUrl: `https://img.youtube.com/vi/${videoId}/0.jpg`,
           embedUrl: convertToEmbedUrl(youtubeUrl),
-          segments: fallbackSegments,
-          transcriptSource: "default",
+          segments: [], // Return empty array instead of default segments
+          transcriptSource: "unavailable", // Change from "default" to "unavailable"
           error: `Error processing video: ${processingError}`,
         },
       });
