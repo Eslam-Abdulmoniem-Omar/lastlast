@@ -1036,41 +1036,10 @@ async function fetchYouTubeTranscript(
 
       // If all else fails, at least get the title
       if (videoTitle) {
-        const segments: DialogueSegment[] = [];
-
-        segments.push({
-          id: uuidv4(),
-          speakerName: "Speaker A",
-          text: videoTitle,
-          startTime: 0,
-          endTime: 5,
-          vocabularyItems: [],
-        });
-
-        const genericLines = [
-          `This video is about ${videoTitle}.`,
-          `Let's discuss the key points in this video.`,
-          `I find this topic very interesting.`,
-          `What do you think about this content?`,
-        ];
-
-        genericLines.forEach((line, index) => {
-          segments.push({
-            id: uuidv4(),
-            speakerName: index % 2 === 0 ? "Speaker B" : "Speaker A",
-            text: line,
-            startTime: (index + 1) * 5,
-            endTime: (index + 2) * 5,
-            vocabularyItems: [],
-          });
-        });
-
-        console.log(
-          `[API] Created ${segments.length} fallback segments from title`
-        );
+        console.log(`[API] Failed to get transcript, returning empty segments`);
         return {
-          segments,
-          source: "title",
+          segments: [],
+          source: "unavailable",
         };
       }
     } catch (titleError) {
