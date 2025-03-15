@@ -950,50 +950,9 @@ function createSegmentsFromSentences(sentences: string[]): DialogueSegment[] {
 
 // Create default segments for any video
 function createDefaultSegments(videoId: string): DialogueSegment[] {
-  console.log("Creating default segments for video:", videoId);
-
-  // Return an empty array instead of default segments
-  // This will force the client to handle the case where no transcript is available
+  console.log("[VERCEL] Creating empty segments array for video:", videoId);
+  // Always return an empty array, never generate default segments
   return [];
-
-  // Old code commented out
-  /*
-  // Create 10 segments of 5 seconds each (50 seconds total)
-  const segments: DialogueSegment[] = [];
-  const segmentDuration = 5;
-  const numberOfSegments = 10;
-
-  const sentences = [
-    "Hello, welcome to this video.",
-    "Today we're going to discuss an interesting topic.",
-    "I hope you find this information useful.",
-    "Let me know what you think in the comments.",
-    "This is an important point to understand.",
-    "Let's break this down step by step.",
-    "First, we need to consider the context.",
-    "Second, we should analyze the details.",
-    "Finally, we can draw some conclusions.",
-    "Thank you for watching this video.",
-  ];
-
-  for (let i = 0; i < numberOfSegments; i++) {
-    const startTime = i * segmentDuration;
-    const endTime = (i + 1) * segmentDuration;
-    const speakerName = i % 2 === 0 ? "Speaker A" : "Speaker B";
-
-    segments.push({
-      id: uuidv4(),
-      speakerName,
-      text: sentences[i],
-      startTime,
-      endTime,
-      vocabularyItems: [],
-    });
-  }
-
-  console.log(`Created ${segments.length} default segments`);
-  return segments;
-  */
 }
 
 export async function GET(request: Request) {
@@ -1001,6 +960,10 @@ export async function GET(request: Request) {
     // Handling YouTube URL processing
     const { searchParams } = new URL(request.url);
     const youtubeUrl = searchParams.get("url");
+
+    console.log("[VERCEL] Processing URL:", youtubeUrl);
+    console.log("[VERCEL] Environment:", process.env.NODE_ENV);
+    console.log("[VERCEL] OpenAI configured:", isOpenAIConfigured());
 
     if (!youtubeUrl) {
       return NextResponse.json(
@@ -1020,12 +983,12 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("Extracted video ID:", videoId);
+    console.log("[VERCEL] Extracted video ID:", videoId);
 
     try {
       // Fetch video metadata
       const metadata = await fetchVideoMetadata(videoId);
-      console.log("Fetched metadata:", metadata.title);
+      console.log("[VERCEL] Fetched metadata:", metadata.title);
 
       // Get the embed URL
       const embedUrl = convertToEmbedUrl(youtubeUrl);
@@ -1035,15 +998,22 @@ export async function GET(request: Request) {
       let transcriptError = null;
 
       try {
+        console.log(
+          "[VERCEL] Attempting to fetch transcript for videoId:",
+          videoId
+        );
         segments = await fetchYouTubeTranscript(videoId, metadata.title);
+        console.log("[VERCEL] Transcript segments fetched:", segments.length);
       } catch (transcriptErr) {
-        console.error("Error fetching transcript:", transcriptErr);
+        console.error("[VERCEL] Error fetching transcript:", transcriptErr);
         transcriptError = `${transcriptErr}`;
         // Don't create default segments, just leave as empty array
         segments = [];
       }
 
-      console.log(`Returning ${segments.length} segments for video ${videoId}`);
+      console.log(
+        `[VERCEL] Returning ${segments.length} segments for video ${videoId}`
+      );
 
       // Update transcript source detection logic
       let transcriptSource = "unavailable";
@@ -1051,6 +1021,7 @@ export async function GET(request: Request) {
         // If we have OpenAI-processed segments, always mark as transcript
         if (isOpenAIConfigured()) {
           transcriptSource = "transcript";
+          console.log("[VERCEL] Using OpenAI processed transcript");
         } else {
           // Check segment characteristics to determine if this is a real transcript
           // Real transcripts typically have:
@@ -1071,13 +1042,21 @@ export async function GET(request: Request) {
             // If we have enough segments with varied lengths, likely a real transcript
             if (hasVariedLengths) {
               transcriptSource = "transcript";
+              console.log(
+                "[VERCEL] Identified as real transcript based on segment analysis"
+              );
             }
           }
         }
       }
 
+      console.log(
+        "[VERCEL] Transcript source determined as:",
+        transcriptSource
+      );
+
       // Return all the data
-      return NextResponse.json({
+      const responseData = {
         data: {
           videoId,
           title: metadata.title || "Video Title",
@@ -1090,9 +1069,15 @@ export async function GET(request: Request) {
           transcriptSource,
           error: transcriptError,
         },
-      });
+      };
+
+      console.log(
+        "[VERCEL] Returning response with segments count:",
+        segments.length
+      );
+      return NextResponse.json(responseData);
     } catch (processingError) {
-      console.error("Error processing video data:", processingError);
+      console.error("[VERCEL] Error processing video data:", processingError);
 
       // Return fallback data with empty segments array
       return NextResponse.json({
@@ -1109,7 +1094,7 @@ export async function GET(request: Request) {
       });
     }
   } catch (error) {
-    console.error("Error processing YouTube URL:", error);
+    console.error("[VERCEL] Error processing YouTube URL:", error);
     return NextResponse.json(
       {
         error:

@@ -33,10 +33,18 @@ import {
 } from "@/lib/utils/youtubeUtils";
 import ProtectedRoute from "@/app/components/ProtectedRoute";
 
-// Export the page directly without the ProtectedRoute wrapper for testing
-export default function AddYouTubeShortPage() {
+export default function AddYouTubeShortPageWrapper() {
+  // Use the ProtectedRoute component to wrap the actual page content
+  return (
+    <ProtectedRoute>
+      <AddYouTubeShortPage />
+    </ProtectedRoute>
+  );
+}
+
+function AddYouTubeShortPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -104,56 +112,101 @@ export default function AddYouTubeShortPage() {
       setError(null);
       setIsProcessing(true);
 
-      const response = await fetchYoutubeTranscript(url, {
-        onStart: () => {
-          // We handle loading state in component
-        },
-        onSuccess: (data) => {
-          // Set video details from metadata
-          setTitle(data.title);
-          setEmbedUrl(data.embedUrl);
+      console.log("Client: Fetching transcript for:", url);
 
-          // Use the segments from metadata response
-          if (data.segments && data.segments.length > 0) {
-            setDialogueSegments(data.segments);
-            setTranscriptSource(data.transcriptSource);
-            setSuccess(true);
-          } else {
-            // If no segments were returned, leave the array empty
-            // This will show our "no transcript available" UI
+      toast.loading("Fetching video transcript...");
+
+      try {
+        const response = await fetchYoutubeTranscript(url, {
+          onStart: () => {
+            // We handle loading state in component
+            console.log("Client: Transcript fetch started");
+          },
+          onSuccess: (data) => {
+            console.log(
+              "Client: Transcript fetch succeeded with data:",
+              JSON.stringify({
+                title: data.title,
+                segmentsCount: data.segments?.length || 0,
+                transcriptSource: data.transcriptSource,
+              })
+            );
+
+            // Set video details from metadata
+            setTitle(data.title || "Untitled Video");
+            setEmbedUrl(data.embedUrl || "");
+
+            // Use the segments from metadata response
+            if (data.segments && data.segments.length > 0) {
+              console.log(
+                `Client: Setting ${data.segments.length} dialogue segments`
+              );
+              setDialogueSegments(data.segments);
+              setTranscriptSource(data.transcriptSource || "unknown");
+              setSuccess(true);
+            } else {
+              // If no segments were returned, leave the array empty
+              console.log(
+                "Client: No segments in response, setting empty array"
+              );
+              setDialogueSegments([]);
+              setTranscriptSource("unavailable");
+
+              // Still show as success because we got the video metadata
+              setSuccess(true);
+
+              // Show a specific error for no transcript
+              toast.error(
+                "No transcript available for this video. You'll need to create dialogue segments manually."
+              );
+            }
+          },
+          onError: (error) => {
+            console.error("Client: Error in transcript fetch:", error);
+            setError(
+              `Failed to fetch YouTube data: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`
+            );
+
+            // Keep the segments array empty on error
             setDialogueSegments([]);
             setTranscriptSource("unavailable");
 
-            // Still show as success because we got the video metadata
-            setSuccess(true);
-
-            // Show a specific error for no transcript
+            // Show error toast
             toast.error(
-              "No transcript available for this video. You'll need to create dialogue segments manually."
+              "Failed to fetch transcript. You'll need to add segments manually."
             );
-          }
-        },
-        onError: (error) => {
-          setError(
-            `Failed to fetch YouTube data: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
+          },
+          onComplete: () => {
+            console.log("Client: Transcript fetch complete");
+            setIsLoading(false);
+            setIsProcessing(false);
+          },
+        });
 
-          // Keep the segments array empty on error
-          setDialogueSegments([]);
-          setTranscriptSource("unavailable");
-        },
-        onComplete: () => {
-          setIsLoading(false);
-          setIsProcessing(false);
-        },
-      });
+        console.log("Client: fetchYoutubeTranscript call completed");
+      } catch (error) {
+        console.error(
+          "Client: Unexpected error in fetchTranscript wrapper:",
+          error
+        );
+        setIsLoading(false);
+        setIsProcessing(false);
+        setError(
+          "An unexpected error occurred while fetching the transcript. Please try again."
+        );
+        toast.error(
+          "Failed to process video. Please try again or use a different URL."
+        );
+      }
     } catch (error) {
-      console.error("Error in fetchTranscript:", error);
-      // This is a fallback in case something goes wrong with the utility function
+      console.error("Client: Critical error in fetchTranscript:", error);
       setIsLoading(false);
       setIsProcessing(false);
+      setError(
+        "An unexpected error occurred. Please reload the page and try again."
+      );
     }
   };
 
@@ -246,6 +299,9 @@ export default function AddYouTubeShortPage() {
       return;
     }
 
+    // No longer requiring users to add additional segments
+    // The segments from the transcript are sufficient
+
     try {
       setIsLoading(true);
       setIsSubmitting(true);
@@ -272,51 +328,19 @@ export default function AddYouTubeShortPage() {
         isShort: true,
       };
 
-      // Check if user is authenticated - for testing purposes, we'll allow proceeding without auth
-      if (user) {
-        const result = await createPodcastWithYouTube(newVideoData);
+      const result = await createPodcastWithYouTube(newVideoData);
 
-        if (result && result.id) {
-          toast.success("YouTube short added successfully!");
-
-          // Create a temporary practice session in localStorage
-          const practiceData = {
-            id: result.id,
-            title,
-            embedUrl,
-            youtubeUrl,
-            dialogueSegments,
-            isTemporary: false,
-            createdAt: new Date().toISOString(),
-          };
-
-          // Save to localStorage for practice
-          localStorage.setItem(
-            "current-practice-data",
-            JSON.stringify(practiceData)
-          );
-
-          // Log for debugging
-          console.log("Saved practice data to localStorage:", practiceData);
-          console.log("Navigating to practice page...");
-
-          // Navigate directly to the practice page instead of the short videos page
-          router.push("/practice/short-video");
-        } else {
-          setError("Failed to add YouTube short");
-        }
-      } else {
-        // For testing when authentication is not working
-        toast.success("Testing mode: YouTube short processed successfully!");
+      if (result && result.id) {
+        toast.success("YouTube short added successfully!");
 
         // Create a temporary practice session in localStorage
         const practiceData = {
-          id: `temp-${uuidv4()}`,
+          id: result.id,
           title,
           embedUrl,
           youtubeUrl,
           dialogueSegments,
-          isTemporary: true,
+          isTemporary: false,
           createdAt: new Date().toISOString(),
         };
 
@@ -326,8 +350,14 @@ export default function AddYouTubeShortPage() {
           JSON.stringify(practiceData)
         );
 
-        // Navigate to practice page
+        // Log for debugging
+        console.log("Saved practice data to localStorage:", practiceData);
+        console.log("Navigating to practice page...");
+
+        // Navigate directly to the practice page instead of the short videos page
         router.push("/practice/short-video");
+      } else {
+        setError("Failed to add YouTube short");
       }
     } catch (error: any) {
       console.error("Error adding YouTube short:", error);
@@ -467,141 +497,6 @@ export default function AddYouTubeShortPage() {
     );
   };
 
-  // Update the renderTranscriptSection function to handle the case when no transcript is available
-  const renderTranscriptSection = () => {
-    return (
-      <div className="lg:col-span-2">
-        <h3 className="text-lg font-medium text-gray-900 mb-3">
-          Dialogue Segments
-        </h3>
-
-        {renderTranscriptSourceInfo()}
-
-        <div className="mt-4 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-          {dialogueSegments.length > 0 ? (
-            dialogueSegments.map((segment, index) => (
-              <div
-                key={segment.id}
-                className="p-3 border rounded-md bg-white shadow-sm hover:shadow-md transition-shadow duration-200"
-              >
-                {editingSegmentId === segment.id ? (
-                  // Inline edit mode - only text editing, no time editing
-                  <div className="space-y-3 p-4 bg-blue-50 rounded-md border-2 border-blue-300 shadow-md">
-                    <div className="flex items-center mb-2">
-                      <div className="flex items-center">
-                        <span className="text-xs font-medium text-blue-700 mr-2">
-                          Time:
-                        </span>
-                        <span className="text-xs font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          {formatTime(segment.startTime)} -{" "}
-                          {formatTime(segment.endTime)}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-blue-700 mb-1">
-                        Dialogue Text:
-                      </label>
-                      <div className="relative">
-                        <textarea
-                          value={segment.text}
-                          onChange={(e) => {
-                            const updatedSegments = [...dialogueSegments];
-                            updatedSegments[index] = {
-                              ...segment,
-                              text: e.target.value,
-                            };
-                            setDialogueSegments(updatedSegments);
-                          }}
-                          rows={4}
-                          className="w-full px-3 py-2 text-sm border-2 border-blue-300 rounded-md bg-white shadow-md focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 font-medium"
-                          placeholder="Enter dialogue text"
-                          style={{
-                            boxShadow: "inset 0 2px 4px rgba(0, 0, 0, 0.1)",
-                          }}
-                          autoFocus
-                        ></textarea>
-                        <div className="absolute inset-0 pointer-events-none border-2 border-blue-300 rounded-md opacity-0"></div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end space-x-2 mt-2">
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingSegmentId(null);
-                          toast.success("Changes saved");
-                        }}
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center"
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // Display mode
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center mb-1">
-                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                          {formatTime(segment.startTime)} -{" "}
-                          {formatTime(segment.endTime)}
-                        </span>
-                      </div>
-                      <p className="text-gray-800">{segment.text}</p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEditSegment(index)}
-                        className="text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-blue-50 transition-colors"
-                        aria-label="Edit segment"
-                        title="Edit segment"
-                      >
-                        <Edit className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSegment(index)}
-                        className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
-                        aria-label="Delete segment"
-                        title="Delete segment"
-                      >
-                        <Trash className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">
-                No transcript segments available for this video.
-              </p>
-              <p className="text-gray-600 mb-6">
-                You can add dialogue segments manually using the form below.
-              </p>
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">
-                  Add your first segment:
-                </h4>
-                {/* Create the first segment form here - copy the one from below */}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white">
       <div className="container mx-auto px-4 pt-28 pb-12 mt-16">
@@ -709,7 +604,130 @@ export default function AddYouTubeShortPage() {
                     </div>
 
                     {/* Right column: Dialogue Segments */}
-                    {renderTranscriptSection()}
+                    <div className="lg:col-span-2">
+                      <h3 className="text-lg font-medium text-gray-900 mb-3">
+                        Dialogue Segments
+                      </h3>
+
+                      {renderTranscriptSourceInfo()}
+
+                      <div className="mt-4 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                        {dialogueSegments.length > 0 ? (
+                          dialogueSegments.map((segment, index) => (
+                            <div
+                              key={segment.id}
+                              className="p-3 border rounded-md bg-white shadow-sm hover:shadow-md transition-shadow duration-200"
+                            >
+                              {editingSegmentId === segment.id ? (
+                                // Inline edit mode - only text editing, no time editing
+                                <div className="space-y-3 p-4 bg-blue-50 rounded-md border-2 border-blue-300 shadow-md">
+                                  <div className="flex items-center mb-2">
+                                    <div className="flex items-center">
+                                      <span className="text-xs font-medium text-blue-700 mr-2">
+                                        Time:
+                                      </span>
+                                      <span className="text-xs font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                        {formatTime(segment.startTime)} -{" "}
+                                        {formatTime(segment.endTime)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-blue-700 mb-1">
+                                      Dialogue Text:
+                                    </label>
+                                    <div className="relative">
+                                      <textarea
+                                        value={segment.text}
+                                        onChange={(e) => {
+                                          const updatedSegments = [
+                                            ...dialogueSegments,
+                                          ];
+                                          updatedSegments[index] = {
+                                            ...segment,
+                                            text: e.target.value,
+                                          };
+                                          setDialogueSegments(updatedSegments);
+                                        }}
+                                        rows={4}
+                                        className="w-full px-3 py-2 text-sm border-2 border-blue-300 rounded-md bg-white shadow-md focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 font-medium"
+                                        placeholder="Enter dialogue text"
+                                        style={{
+                                          boxShadow:
+                                            "inset 0 2px 4px rgba(0, 0, 0, 0.1)",
+                                        }}
+                                        autoFocus
+                                      ></textarea>
+                                      <div className="absolute inset-0 pointer-events-none border-2 border-blue-300 rounded-md opacity-0"></div>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-end space-x-2 mt-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEdit}
+                                      className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingSegmentId(null);
+                                        toast.success("Changes saved");
+                                      }}
+                                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center"
+                                    >
+                                      <Save className="h-3 w-3 mr-1" />
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                // Display mode
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center mb-1">
+                                      <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                        {formatTime(segment.startTime)} -{" "}
+                                        {formatTime(segment.endTime)}
+                                      </span>
+                                    </div>
+                                    <p className="text-gray-800">
+                                      {segment.text}
+                                    </p>
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditSegment(index)}
+                                      className="text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-blue-50 transition-colors"
+                                      aria-label="Edit segment"
+                                      title="Edit segment"
+                                    >
+                                      <Edit className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSegment(index)}
+                                      className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
+                                      aria-label="Delete segment"
+                                      title="Delete segment"
+                                    >
+                                      <Trash className="h-5 w-5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 bg-gray-50 rounded-lg text-gray-500 text-center">
+                            No segments available yet. Click &quot;Start&quot;
+                            to generate segments.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

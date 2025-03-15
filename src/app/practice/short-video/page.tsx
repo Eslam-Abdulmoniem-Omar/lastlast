@@ -22,7 +22,6 @@ export default function ShortVideoPracticePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("listening");
   const [showTranscript, setShowTranscript] = useState(true);
-  const [isTestMode, setIsTestMode] = useState(false);
 
   useEffect(() => {
     // Log that the effect is running
@@ -44,48 +43,12 @@ export default function ShortVideoPracticePage() {
 
         const data = JSON.parse(storedData);
         console.log("Parsed practice data:", data);
-
-        // Check if this is test mode
-        if (data.isTemporary === true) {
-          setIsTestMode(true);
-          toast.success(
-            "Running in test mode - changes won't be saved to your account"
-          );
-        }
-
-        // Verify the data has the necessary fields
-        if (!data.dialogueSegments || !Array.isArray(data.dialogueSegments)) {
-          console.error(
-            "Invalid practice data structure - missing dialogue segments"
-          );
-          data.dialogueSegments = [];
-          toast.error(
-            "Practice data is incomplete. Some features may not work properly."
-          );
-        }
-
         console.log(
           "Data has dialogueSegments:",
           data.dialogueSegments
             ? `Yes, ${data.dialogueSegments.length} segments`
             : "No"
         );
-
-        // Make sure embedUrl is available and valid
-        if (!data.embedUrl) {
-          console.error("Missing embedUrl in practice data");
-          if (data.youtubeUrl) {
-            // Try to extract from youtubeUrl
-            const videoId = data.youtubeUrl.match(
-              /(?:v=|\/)([\w-]+)(?:\?|$)/
-            )?.[1];
-            if (videoId) {
-              data.embedUrl = `https://www.youtube.com/embed/${videoId}`;
-              console.log("Generated embedUrl from youtubeUrl:", data.embedUrl);
-            }
-          }
-        }
-
         setPracticeData(data);
       } catch (error) {
         console.error("Error loading practice data:", error);
@@ -282,14 +245,6 @@ export default function ShortVideoPracticePage() {
 
   return (
     <div className="bg-blue-500 bg-gradient-to-r from-blue-500 to-purple-600">
-      {/* Test mode indicator */}
-      {isTestMode && (
-        <div className="bg-yellow-400 text-yellow-900 px-4 py-2 text-center">
-          <strong>Test Mode:</strong> You're using the app without
-          authentication. Changes won't be saved to your account.
-        </div>
-      )}
-
       {/* Header */}
       <div className="container mx-auto px-4 py-6 text-white">
         <h1 className="text-3xl font-bold">

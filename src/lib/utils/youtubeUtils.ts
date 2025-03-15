@@ -50,34 +50,8 @@ export const convertToEmbedUrl = (url: string): string => {
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
   // Return an empty array instead of default segments
-  // This will prevent the app from showing placeholder text
+  console.log("[Utils] createDefaultSegments called - returning empty array");
   return [];
-
-  // Old implementation commented out
-  /*
-  const segments: DialogueSegment[] = [];
-  const segmentDuration = 5;
-  const segmentTexts = [
-    "Welcome to this video.",
-    "Today we'll be discussing an interesting topic.",
-    "I hope you find this content useful.",
-    "Let me know your thoughts in the comments.",
-    "Thank you for watching!",
-  ];
-
-  for (let i = 0; i < segmentTexts.length; i++) {
-    segments.push({
-      id: uuidv4(),
-      speakerName: "",
-      text: segmentTexts[i],
-      startTime: i * segmentDuration,
-      endTime: (i + 1) * segmentDuration,
-      vocabularyItems: [],
-    });
-  }
-
-  return segments;
-  */
 };
 
 /**
@@ -113,68 +87,117 @@ export const fetchTranscript = async (
       callbacks.onStart();
     }
 
-    toast.loading("Fetching video transcript...");
-    console.log("Fetching transcript for:", url);
+    console.log("[Utils] Fetching transcript for:", url);
 
-    // First, try to get the video metadata directly
-    const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
-      url
-    )}&t=${Date.now()}`; // Add timestamp to prevent caching
-    console.log("Fetching metadata from:", metadataUrl);
+    // Add a timeout for the fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.log("[Utils] Aborting fetch due to timeout");
+    }, 30000); // 30 second timeout
 
-    const metadataResponse = await fetch(metadataUrl);
+    try {
+      // First, try to get the video metadata directly
+      const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
+        url
+      )}&t=${Date.now()}`; // Add timestamp to prevent caching
 
-    if (!metadataResponse.ok) {
-      const errorData = await metadataResponse.json();
-      console.error("Metadata API error:", errorData);
-      toast.dismiss();
-      throw new Error(errorData.error || "Failed to fetch video data");
-    }
+      console.log("[Utils] Fetching metadata from:", metadataUrl);
 
-    const metadataJson = await metadataResponse.json();
-    const metaData = metadataJson.data;
+      const metadataResponse = await fetch(metadataUrl, {
+        signal: controller.signal,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
 
-    if (!metaData) {
-      toast.dismiss();
-      throw new Error("No metadata returned from API");
-    }
+      // Clear the timeout since the fetch completed
+      clearTimeout(timeoutId);
 
-    console.log("Received metadata:", metaData);
+      if (!metadataResponse.ok) {
+        const errorText = await metadataResponse.text();
+        console.error("[Utils] Metadata API error response:", errorText);
+        toast.dismiss();
+        throw new Error(
+          `API responded with ${metadataResponse.status}: ${errorText.substring(
+            0,
+            100
+          )}`
+        );
+      }
 
-    // Process the response
-    const responseData = {
-      title: metaData.title || "",
-      embedUrl: metaData.embedUrl || "",
-      segments: metaData.segments || [],
-      transcriptSource: metaData.transcriptSource || "transcript",
-    };
-
-    if (callbacks.onSuccess) {
-      callbacks.onSuccess(responseData);
-    }
-
-    // Show appropriate success message based on transcript source
-    toast.dismiss();
-    if (metaData.transcriptSource === "transcript") {
-      toast.success(
-        `Video loaded with actual transcript (${metaData.segments.length} segments)`,
-        { duration: 4000 }
+      const metadataJson = await metadataResponse.json();
+      console.log("[Utils] Metadata API response type:", typeof metadataJson);
+      console.log(
+        "[Utils] Metadata API response keys:",
+        Object.keys(metadataJson)
       );
-    } else if (metaData.segments && metaData.segments.length > 0) {
-      toast.success(
-        `Video loaded with generated segments (${metaData.segments.length} segments)`,
-        { duration: 4000 }
-      );
-    } else {
-      toast.error("No transcript available. Using generated segments instead.");
-    }
 
-    return responseData;
+      const metaData = metadataJson.data;
+
+      if (!metaData) {
+        toast.dismiss();
+        throw new Error("No metadata returned from API");
+      }
+
+      console.log(
+        "[Utils] Received metadata:",
+        JSON.stringify({
+          title: metaData.title || "No title",
+          segments: metaData.segments ? metaData.segments.length : 0,
+          transcriptSource: metaData.transcriptSource || "unknown",
+        })
+      );
+
+      // Process the response
+      const responseData = {
+        title: metaData.title || "",
+        embedUrl: metaData.embedUrl || "",
+        segments: metaData.segments || [],
+        transcriptSource: metaData.transcriptSource || "transcript",
+      };
+
+      if (callbacks.onSuccess) {
+        callbacks.onSuccess(responseData);
+      }
+
+      // Show appropriate success message based on transcript source
+      toast.dismiss();
+      if (
+        metaData.transcriptSource === "transcript" &&
+        metaData.segments &&
+        metaData.segments.length > 0
+      ) {
+        toast.success(
+          `Video loaded with transcript (${metaData.segments.length} segments)`,
+          { duration: 4000 }
+        );
+      } else if (metaData.segments && metaData.segments.length > 0) {
+        toast.success(`Video loaded (${metaData.segments.length} segments)`, {
+          duration: 4000,
+        });
+      } else {
+        toast.error(
+          "No transcript available. You'll need to add segments manually."
+        );
+      }
+
+      return responseData;
+    } catch (fetchError) {
+      // Clear the timeout if the fetch failed
+      clearTimeout(timeoutId);
+
+      console.error("[Utils] Fetch error:", fetchError);
+      throw fetchError;
+    }
   } catch (error: any) {
-    console.error("Error fetching YouTube data:", error);
+    console.error("[Utils] Error fetching YouTube data:", error);
     toast.dismiss();
     toast.error(
-      "Failed to load video details. Using generated segments instead."
+      `Failed to load video details: ${
+        error.message?.substring(0, 100) || "Unknown error"
+      }`
     );
 
     if (callbacks.onError) {
@@ -218,34 +241,43 @@ export const saveTemporaryPracticeData = (data: {
 };
 
 /**
- * Returns appropriate info for the transcript source display
+ * Get transcript source information styling and message
  */
-export const getTranscriptSourceInfo = (source: string) => {
-  switch (source) {
-    case "transcript":
-      return {
-        message:
-          "This transcript was sourced directly from YouTube captions. The segments may require some editing for accuracy.",
-        colorClass: "bg-green-50 text-green-700 border border-green-200",
-      };
-    case "default":
-      return {
-        message:
-          "No transcript was available for this video. Using default segments that you should edit.",
-        colorClass: "bg-yellow-50 text-yellow-700 border border-yellow-200",
-      };
-    case "unavailable":
-      return {
-        message:
-          "No transcript could be found for this video. Please add dialogue segments manually.",
-        colorClass: "bg-red-50 text-red-700 border border-red-200",
-      };
-    default:
-      return {
-        message: "Transcript source unknown.",
-        colorClass: "bg-gray-50 text-gray-700 border border-gray-200",
-      };
-  }
+export const getTranscriptSourceInfo = (transcriptSource: string) => {
+  const getColorClass = () => {
+    switch (transcriptSource) {
+      case "transcript":
+        return "text-green-700 bg-green-50";
+      case "transcript-processed":
+        return "text-green-700 bg-green-50";
+      case "description":
+        return "text-blue-700 bg-blue-50";
+      case "title":
+        return "text-yellow-700 bg-yellow-50";
+      default:
+        return "text-gray-700 bg-gray-50";
+    }
+  };
+
+  const getMessage = () => {
+    switch (transcriptSource) {
+      case "transcript":
+        return "These segments contain the actual transcript from the video with accurate timestamps.";
+      case "transcript-processed":
+        return "These segments contain the actual transcript from the video, processed by AI for better sentence breaks and timestamps.";
+      case "description":
+        return "These segments are created from the video description since a transcript wasn't available.";
+      case "title":
+        return "These segments are based on the video title since a transcript wasn't available.";
+      default:
+        return "No transcript was available for this video, so generated segments were created.";
+    }
+  };
+
+  return {
+    colorClass: getColorClass(),
+    message: getMessage(),
+  };
 };
 
 /**
