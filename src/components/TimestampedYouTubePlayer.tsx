@@ -171,7 +171,6 @@ export default function TimestampedYouTubePlayer({
         clearInterval(timerRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-activate the first dialogue line when component mounts

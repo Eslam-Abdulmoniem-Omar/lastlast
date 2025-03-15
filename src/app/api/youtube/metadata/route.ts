@@ -227,7 +227,8 @@ IMPORTANT:
 
         // Ensure each segment has the required properties
         const validSegments = parsedResponse.segments.filter(
-          (segment) => segment.speakerName && segment.text
+          (segment: { speakerName: string; text: string }) =>
+            segment.speakerName && segment.text
         );
 
         if (validSegments.length === 0) {
@@ -659,7 +660,7 @@ async function fetchYouTubeTranscript(
         const html = await response.text();
 
         // Look for transcript data in the HTML
-        const captionTrackPattern = /"captionTracks":\[[\s\S]*?\]/;
+        const captionTrackPattern = /"captionTracks":\[.*?\]/s;
         const match = html.match(captionTrackPattern);
 
         if (match && match[0]) {

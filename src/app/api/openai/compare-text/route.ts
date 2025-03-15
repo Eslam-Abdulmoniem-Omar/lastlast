@@ -95,8 +95,7 @@ Only respond with valid JSON.`,
     });
 
     // Parse the response
-    const content = response.choices[0]?.message?.content || "{}";
-    const result = JSON.parse(content);
+    const result = JSON.parse(response.choices[0].message.content);
 
     // Remove log that exposes result data
     // console.log("Comparison result:", result);

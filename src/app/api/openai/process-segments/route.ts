@@ -112,7 +112,7 @@ Important guidelines:
 
       try {
         // Extract the JSON array from the response
-        const jsonMatch = content.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+        const jsonMatch = content.match(/\[\s*\{.*\}\s*\]/s);
         const jsonStr = jsonMatch ? jsonMatch[0] : content;
         const sentences = JSON.parse(jsonStr);
 
