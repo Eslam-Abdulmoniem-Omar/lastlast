@@ -74,26 +74,6 @@ function AddYouTubeShortPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [practiceStarted, setPracticeStarted] = useState(false);
-  // Add debug state
-  const [debugInfo, setDebugInfo] = useState<{
-    logs: string[];
-    lastResponse: any;
-  }>({
-    logs: [],
-    lastResponse: null,
-  });
-
-  // Add debug logger function
-  const addDebugLog = (message: string) => {
-    setDebugInfo((prev) => ({
-      ...prev,
-      logs: [
-        ...prev.logs,
-        `${new Date().toISOString().split("T")[1].split(".")[0]} - ${message}`,
-      ],
-    }));
-    console.log(`DEBUG: ${message}`);
-  };
 
   const handleYoutubeUrlChange = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -132,145 +112,95 @@ function AddYouTubeShortPage() {
       setError(null);
       setIsProcessing(true);
 
-      addDebugLog(`Starting transcript fetch for: ${url}`);
+      console.log("Client: Fetching transcript for:", url);
 
       toast.loading("Fetching video transcript...");
 
       try {
-        // Direct API call to troubleshoot
-        addDebugLog(`Making direct API call to metadata endpoint`);
-        const timestamp = Date.now();
-        const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
-          url
-        )}&t=${timestamp}`;
-        addDebugLog(`API URL: ${metadataUrl}`);
-
-        // Add timeout handling
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-        try {
-          const metadataResponse = await fetch(metadataUrl, {
-            signal: controller.signal,
-            headers: {
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          });
-
-          clearTimeout(timeoutId);
-
-          addDebugLog(`API response status: ${metadataResponse.status}`);
-
-          if (!metadataResponse.ok) {
-            const errorText = await metadataResponse.text();
-            addDebugLog(
-              `API error response: ${errorText.substring(0, 200)}...`
+        const response = await fetchYoutubeTranscript(url, {
+          onStart: () => {
+            // We handle loading state in component
+            console.log("Client: Transcript fetch started");
+          },
+          onSuccess: (data) => {
+            console.log(
+              "Client: Transcript fetch succeeded with data:",
+              JSON.stringify({
+                title: data.title,
+                segmentsCount: data.segments?.length || 0,
+                transcriptSource: data.transcriptSource,
+              })
             );
-            throw new Error(
-              `API responded with ${
-                metadataResponse.status
-              }: ${errorText.substring(0, 100)}`
+
+            // Set video details from metadata
+            setTitle(data.title || "Untitled Video");
+            setEmbedUrl(data.embedUrl || "");
+
+            // Use the segments from metadata response
+            if (data.segments && data.segments.length > 0) {
+              console.log(
+                `Client: Setting ${data.segments.length} dialogue segments`
+              );
+              setDialogueSegments(data.segments);
+              setTranscriptSource(data.transcriptSource || "unknown");
+              setSuccess(true);
+            } else {
+              // If no segments were returned, leave the array empty
+              console.log(
+                "Client: No segments in response, setting empty array"
+              );
+              setDialogueSegments([]);
+              setTranscriptSource("unavailable");
+
+              // Still show as success because we got the video metadata
+              setSuccess(true);
+
+              // Show a specific error for no transcript
+              toast.error(
+                "No transcript available for this video. You'll need to create dialogue segments manually."
+              );
+            }
+          },
+          onError: (error) => {
+            console.error("Client: Error in transcript fetch:", error);
+            setError(
+              `Failed to fetch YouTube data: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`
             );
-          }
 
-          const metadataJson = await metadataResponse.json();
-          addDebugLog(`API response type: ${typeof metadataJson}`);
-          addDebugLog(
-            `API response keys: ${Object.keys(metadataJson).join(", ")}`
-          );
+            // Keep the segments array empty on error
+            setDialogueSegments([]);
+            setTranscriptSource("unavailable");
 
-          setDebugInfo((prev) => ({
-            ...prev,
-            lastResponse: metadataJson,
-          }));
-
-          const metaData = metadataJson.data;
-
-          if (!metaData) {
-            addDebugLog(`No data in API response`);
-            throw new Error("No metadata returned from API");
-          }
-
-          addDebugLog(
-            `Metadata received - Title: ${metaData.title || "No title"}`
-          );
-          addDebugLog(
-            `Segments count: ${
-              metaData.segments ? metaData.segments.length : 0
-            }`
-          );
-          addDebugLog(
-            `Transcript source: ${metaData.transcriptSource || "unknown"}`
-          );
-
-          // Process the response
-          const responseData = {
-            title: metaData.title || "",
-            embedUrl: metaData.embedUrl || "",
-            segments: metaData.segments || [],
-            transcriptSource: metaData.transcriptSource || "transcript",
-          };
-
-          // Set the data in state
-          setTitle(responseData.title);
-          setEmbedUrl(responseData.embedUrl);
-          setDialogueSegments(responseData.segments);
-          setTranscriptSource(responseData.transcriptSource);
-          setSuccess(true);
-
-          // Show appropriate success message
-          toast.dismiss();
-
-          if (responseData.segments && responseData.segments.length > 0) {
-            addDebugLog(
-              `Successfully set ${responseData.segments.length} segments`
-            );
-            toast.success(
-              `Video loaded with ${responseData.segments.length} segments`,
-              {
-                duration: 4000,
-              }
-            );
-          } else {
-            addDebugLog(`No segments available`);
+            // Show error toast
             toast.error(
-              "No transcript available. You'll need to add segments manually."
+              "Failed to fetch transcript. You'll need to add segments manually."
             );
-          }
+          },
+          onComplete: () => {
+            console.log("Client: Transcript fetch complete");
+            setIsLoading(false);
+            setIsProcessing(false);
+          },
+        });
 
-          return responseData;
-        } catch (fetchError) {
-          clearTimeout(timeoutId);
-          addDebugLog(`Fetch error: ${fetchError.toString()}`);
-          throw fetchError;
-        }
-      } catch (error: any) {
-        addDebugLog(`Error in transcript fetch: ${error.toString()}`);
-        console.error("Client: Error in transcript fetch:", error);
-        setError(
-          `Failed to fetch YouTube data: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
+        console.log("Client: fetchYoutubeTranscript call completed");
+      } catch (error) {
+        console.error(
+          "Client: Unexpected error in fetchTranscript wrapper:",
+          error
         );
-
-        // Keep the segments array empty on error
-        setDialogueSegments([]);
-        setTranscriptSource("unavailable");
-
-        // Show error toast
-        toast.dismiss();
-        toast.error(
-          "Failed to fetch transcript. You'll need to add segments manually."
-        );
-      } finally {
-        addDebugLog(`Transcript fetch attempt completed`);
         setIsLoading(false);
         setIsProcessing(false);
+        setError(
+          "An unexpected error occurred while fetching the transcript. Please try again."
+        );
+        toast.error(
+          "Failed to process video. Please try again or use a different URL."
+        );
       }
     } catch (error) {
-      addDebugLog(`Critical error: ${error.toString()}`);
       console.error("Client: Critical error in fetchTranscript:", error);
       setIsLoading(false);
       setIsProcessing(false);
@@ -626,44 +556,6 @@ function AddYouTubeShortPage() {
                   </div>
                 </div>
               )}
-
-              {/* Debug Panel */}
-              <div className="mb-6 p-4 bg-gray-100 border border-gray-300 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Debug Information
-                  </h3>
-                  <button
-                    onClick={() =>
-                      setDebugInfo({ logs: [], lastResponse: null })
-                    }
-                    className="px-2 py-1 bg-gray-200 rounded text-sm"
-                  >
-                    Clear Logs
-                  </button>
-                </div>
-                <div className="bg-gray-800 text-green-400 p-3 rounded font-mono text-xs h-40 overflow-y-auto mb-2">
-                  {debugInfo.logs.length > 0 ? (
-                    debugInfo.logs.map((log, i) => (
-                      <div key={i} className="mb-1">
-                        {log}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-gray-500">No logs yet...</div>
-                  )}
-                </div>
-                {debugInfo.lastResponse && (
-                  <div className="mt-2">
-                    <h4 className="text-sm font-medium text-gray-900 mb-1">
-                      Last API Response:
-                    </h4>
-                    <pre className="bg-gray-800 text-blue-400 p-3 rounded font-mono text-xs h-40 overflow-auto">
-                      {JSON.stringify(debugInfo.lastResponse, null, 2)}
-                    </pre>
-                  </div>
-                )}
-              </div>
 
               <div className="space-y-8">
                 <div className="bg-white p-8 rounded-xl shadow-sm">
