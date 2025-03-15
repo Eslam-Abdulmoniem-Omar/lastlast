@@ -1,11 +1,12 @@
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { YoutubeTranscript } from "youtube-transcript";
 import { OpenAI } from "openai";
 import axios from "axios";
+
+// Set dynamic to force runtime execution for each request
+export const dynamic = "force-dynamic";
 
 // Set a longer timeout for the API function (config is handled differently in App Router)
 export const maxDuration = 60; // 60 seconds maximum duration
@@ -72,7 +73,7 @@ async function fetchVideoMetadata(videoId: string) {
       // First try to get video details including duration using YouTube API
       const apiKey =
         process.env.YOUTUBE_API_KEY ||
-        "AIzaSyBc_9DZAQrhUsbPvGa6WkGO3mUWprHGjj0";
+        "AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM";
       const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${apiKey}`;
 
       try {
@@ -534,168 +535,117 @@ async function fetchYouTubeTranscript(
 
   // Use AbortController for timeout
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000); // Reduced to 8 seconds for Vercel
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
   try {
-    // Method 1: Try Innertube API (YouTube's internal API) - Most reliable in production
+    // Method 1: Try using Innertube API (YouTube's internal API)
     try {
-      console.log("[API] Attempting Innertube API as primary method");
+      console.log("[API] Attempting to fetch transcript using Innertube API");
 
-      const headers = {
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-      };
-
-      // First fetch the video page with short timeout
-      const innertubeController = new AbortController();
-      const innertubeTimeoutId = setTimeout(
-        () => innertubeController.abort(),
-        5000
+      const response = await axios.get(
+        `https://www.youtube.com/watch?v=${videoId}&hl=en`,
+        {
+          timeout: 5000,
+          headers: {
+            Accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          },
+        }
       );
 
-      try {
-        const response = await axios.get(
-          `https://www.youtube.com/watch?v=${videoId}&hl=en`,
-          {
-            timeout: 5000,
-            headers,
-            signal: innertubeController.signal,
-          }
-        );
+      const html = response.data;
+      const ytInitialDataMatch = html.match(/ytInitialData\s*=\s*({.+?});/);
+      const playerResponse = html.match(
+        /var\s+ytInitialPlayerResponse\s*=\s*({.+?});/
+      );
 
-        clearTimeout(innertubeTimeoutId);
+      if (ytInitialDataMatch && playerResponse) {
+        const ytInitialData = JSON.parse(ytInitialDataMatch[1]);
+        const playerData = JSON.parse(playerResponse[1]);
 
-        const html = response.data;
-        const ytInitialDataMatch = html.match(/ytInitialData\s*=\s*({.+?});/);
-        const playerResponse = html.match(
-          /var\s+ytInitialPlayerResponse\s*=\s*({.+?});/
-        );
+        // Extract captions data
+        if (
+          playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks
+        ) {
+          const captionTracks =
+            playerData.captions.playerCaptionsTracklistRenderer.captionTracks;
+          const captionTrack =
+            captionTracks.find((track: any) => track.languageCode === "en") ||
+            captionTracks[0];
 
-        if (ytInitialDataMatch && playerResponse) {
-          const ytInitialData = JSON.parse(ytInitialDataMatch[1]);
-          const playerData = JSON.parse(playerResponse[1]);
+          if (captionTrack) {
+            const transcriptResponse = await axios.get(captionTrack.baseUrl, {
+              timeout: 5000,
+            });
+            const xmlData = transcriptResponse.data;
+            const textSegments = xmlData.match(/<text.+?>.+?<\/text>/g) || [];
 
-          // Extract captions data
-          if (
-            playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks
-          ) {
-            const captionTracks =
-              playerData.captions.playerCaptionsTracklistRenderer.captionTracks;
-            const captionTrack =
-              captionTracks.find((track: any) => track.languageCode === "en") ||
-              captionTracks[0];
+            if (textSegments.length > 0) {
+              const rawSegments = textSegments.map((segment: string) => {
+                const startMatch = segment.match(/start="([\d\.]+)"/);
+                const durMatch = segment.match(/dur="([\d\.]+)"/);
+                const textMatch = segment.match(/>(.+?)</);
 
-            if (captionTrack) {
-              // Use a direct fetch with timeout for captions - more reliable than axios in some environments
-              const captionController = new AbortController();
-              const captionTimeoutId = setTimeout(
-                () => captionController.abort(),
-                4000
-              );
+                return {
+                  text: textMatch ? decodeHTMLEntities(textMatch[1]) : "",
+                  startTime: startMatch ? parseFloat(startMatch[1]) : 0,
+                  duration: durMatch ? parseFloat(durMatch[1]) : 5,
+                };
+              });
 
-              try {
-                const captionResponse = await fetch(captionTrack.baseUrl, {
-                  signal: captionController.signal,
-                  headers: {
-                    "Cache-Control": "no-cache",
-                    Pragma: "no-cache",
-                  },
-                });
-
-                clearTimeout(captionTimeoutId);
-
-                if (!captionResponse.ok) {
-                  throw new Error(
-                    `Caption fetch failed with status ${captionResponse.status}`
-                  );
-                }
-
-                const xmlData = await captionResponse.text();
-                const textSegments =
-                  xmlData.match(/<text.+?>.+?<\/text>/g) || [];
-
-                if (textSegments.length > 0) {
-                  console.log(
-                    `[API] Innertube API: Found ${textSegments.length} text segments in XML`
+              // If we have OpenAI, try to process with GPT
+              if (isOpenAIConfigured() && rawSegments.length > 0) {
+                try {
+                  const combinedText = rawSegments
+                    .map((seg: { text: string }) => seg.text)
+                    .join(" ");
+                  const originalTimingData = rawSegments.map(
+                    (item: {
+                      text: string;
+                      startTime: number;
+                      duration: number;
+                    }) => ({
+                      text: item.text,
+                      startTime: item.startTime,
+                      endTime: item.startTime + item.duration,
+                    })
                   );
 
-                  const rawSegments = textSegments.map((segment: string) => {
-                    const startMatch = segment.match(/start="([\d\.]+)"/);
-                    const durMatch = segment.match(/dur="([\d\.]+)"/);
-                    const textMatch = segment.match(/>(.+?)</);
+                  const gptSegments = await processTranscriptWithGPT(
+                    combinedText,
+                    videoTitle,
+                    originalTimingData
+                  );
 
+                  if (gptSegments.length > 0) {
+                    console.log(
+                      "[API] Using GPT-processed segments from Innertube API"
+                    );
                     return {
-                      text: textMatch ? decodeHTMLEntities(textMatch[1]) : "",
-                      startTime: startMatch ? parseFloat(startMatch[1]) : 0,
-                      duration: durMatch ? parseFloat(durMatch[1]) : 5,
+                      segments: gptSegments,
+                      source: "transcript",
                     };
-                  });
-
-                  // If we have OpenAI, try to process with GPT
-                  if (isOpenAIConfigured() && rawSegments.length > 0) {
-                    try {
-                      const combinedText = rawSegments
-                        .map((seg: { text: string }) => seg.text)
-                        .join(" ");
-                      const originalTimingData = rawSegments.map(
-                        (item: {
-                          text: string;
-                          startTime: number;
-                          duration: number;
-                        }) => ({
-                          text: item.text,
-                          startTime: item.startTime,
-                          endTime: item.startTime + item.duration,
-                        })
-                      );
-
-                      const gptSegments = await processTranscriptWithGPT(
-                        combinedText,
-                        videoTitle,
-                        originalTimingData
-                      );
-
-                      if (gptSegments.length > 0) {
-                        console.log(
-                          "[API] Using GPT-processed segments from Innertube API"
-                        );
-                        return {
-                          segments: gptSegments,
-                          source: "transcript",
-                        };
-                      }
-                    } catch (gptError) {
-                      console.error(
-                        "[API] Error processing with GPT, falling back:",
-                        gptError
-                      );
-                    }
                   }
-
-                  // Fallback to simple segmentation if GPT processing fails
-                  console.log(
-                    "[API] Using simple segmentation from Innertube API"
+                } catch (gptError) {
+                  console.error(
+                    "[API] Error processing with GPT, falling back:",
+                    gptError
                   );
-                  const segments = createSimpleSegments(rawSegments);
-                  return {
-                    segments,
-                    source: "transcript",
-                  };
                 }
-              } catch (captionError) {
-                console.error("[API] Error fetching captions:", captionError);
               }
+
+              // Fallback to simple segmentation if GPT processing fails
+              const segments = createSimpleSegments(rawSegments);
+              return {
+                segments,
+                source: "transcript",
+              };
             }
           }
         }
-      } catch (error) {
-        clearTimeout(innertubeTimeoutId);
-        console.error("[API] Innertube API error:", error);
       }
     } catch (innertubeError) {
       console.error("[API] Innertube API fallback failed:", innertubeError);
@@ -1027,7 +977,7 @@ async function fetchYouTubeTranscript(
 
       const apiKey =
         process.env.YOUTUBE_API_KEY ||
-        "AIzaSyBc_9DZAQrhUsbPvGa6WkGO3mUWprHGjj0";
+        "AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM";
       const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
 
       const videoResponse = await fetch(videoDetailsUrl, {
@@ -1078,9 +1028,56 @@ async function fetchYouTubeTranscript(
       console.error("[API] Description fallback failed:", descriptionError);
     }
 
-    // Method 5: Fallback to empty segments rather than generic ones
+    // Method 5: Fallback to oEmbed title
+    try {
+      console.log("[API] Attempting title fallback");
+
+      // If all else fails, at least get the title
+      if (videoTitle) {
+        const segments: DialogueSegment[] = [];
+
+        segments.push({
+          id: uuidv4(),
+          speakerName: "Speaker A",
+          text: videoTitle,
+          startTime: 0,
+          endTime: 5,
+          vocabularyItems: [],
+        });
+
+        const genericLines = [
+          `This video is about ${videoTitle}.`,
+          `Let's discuss the key points in this video.`,
+          `I find this topic very interesting.`,
+          `What do you think about this content?`,
+        ];
+
+        genericLines.forEach((line, index) => {
+          segments.push({
+            id: uuidv4(),
+            speakerName: index % 2 === 0 ? "Speaker B" : "Speaker A",
+            text: line,
+            startTime: (index + 1) * 5,
+            endTime: (index + 2) * 5,
+            vocabularyItems: [],
+          });
+        });
+
+        console.log(
+          `[API] Created ${segments.length} fallback segments from title`
+        );
+        return {
+          segments,
+          source: "title",
+        };
+      }
+    } catch (titleError) {
+      console.error("[API] Title fallback failed:", titleError);
+    }
+
+    // If all methods fail, return empty segments
     console.log(
-      "[API] All transcript methods failed - DO NOT use default segments"
+      "[API] All transcript methods failed, returning empty segments"
     );
     return {
       segments: [],
@@ -1189,189 +1186,56 @@ export async function GET(request: Request) {
     );
     console.log(`[API] Processing URL: ${youtubeUrl}`);
     console.log(`[API] Cache buster: ${cacheBuster || "none"}`);
-    console.log(
-      `[API] Request headers: ${JSON.stringify(
-        Object.fromEntries(request.headers),
-        null,
-        2
-      )}`
-    );
 
     if (!youtubeUrl) {
-      const responseTime = Date.now() - startTime;
-      console.log(`[API] Error: Missing URL parameter (${responseTime}ms)`);
-
-      return new NextResponse(
-        JSON.stringify({
-          error: "YouTube URL is required",
-        }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate, proxy-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        }
+      return NextResponse.json(
+        { error: "YouTube URL is required" },
+        { status: 400 }
       );
     }
 
-    // Extract video ID
-    const videoId = extractVideoId(youtubeUrl);
-    if (!videoId) {
-      const responseTime = Date.now() - startTime;
-      console.log(
-        `[API] Error: Could not extract video ID (${responseTime}ms)`
-      );
-
-      return new NextResponse(
-        JSON.stringify({
-          error: "Could not extract video ID from URL",
-        }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate, proxy-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        }
-      );
-    }
-
-    console.log(`[API] Extracted video ID: ${videoId}`);
-
-    try {
-      // Fetch basic metadata first
-      const metadata = await fetchVideoMetadata(videoId);
-      const embedUrl = convertToEmbedUrl(youtubeUrl);
-
-      // Check if video is too long
-      if (metadata.isTooLong) {
-        const responseTime = Date.now() - startTime;
-        console.log(
-          `[API] Error: Video too long (${metadata.duration}s) (${responseTime}ms)`
-        );
-
-        return new NextResponse(
-          JSON.stringify({
-            error: "Video is too long (maximum 2 minutes allowed)",
-            data: {
-              videoId,
-              title: metadata.title || "Video Title",
-              author: metadata.author_name || "Unknown Creator",
-              thumbnailUrl:
-                metadata.thumbnail_url ||
-                `https://img.youtube.com/vi/${videoId}/0.jpg`,
-              embedUrl,
-              duration: metadata.duration,
-              isTooLong: true,
-            },
-          }),
-          {
-            status: 413, // Payload Too Large
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control":
-                "no-store, no-cache, must-revalidate, proxy-revalidate",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          }
-        );
+    // Forward the request to the Express server
+    const expressServerUrl =
+      process.env.EXPRESS_SERVER_URL || "http://localhost:3001";
+    const response = await fetch(
+      `${expressServerUrl}/api/transcript?url=${encodeURIComponent(
+        youtubeUrl
+      )}`,
+      {
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+        },
       }
+    );
 
-      // Then fetch transcript with multiple fallback methods
-      const transcriptResult = await fetchYouTubeTranscript(
-        videoId,
-        metadata.title
-      );
+    const data = await response.json();
+    const responseTime = Date.now() - startTime;
+    console.log(`[API] Request completed in ${responseTime}ms`);
 
-      const segments = transcriptResult.segments;
-      const transcriptSource = transcriptResult.source;
-
-      // Log completion information
-      const responseTime = Date.now() - startTime;
-      console.log(`[API] Request completed in ${responseTime}ms`);
-      console.log(`[API] Transcript source: ${transcriptSource}`);
-      console.log(`[API] Segments count: ${segments.length}`);
-
-      // Return the response with appropriate headers to prevent caching
-      return new NextResponse(
-        JSON.stringify({
-          data: {
-            videoId,
-            title: metadata.title || "Video Title",
-            author: metadata.author_name || "Unknown Creator",
-            thumbnailUrl:
-              metadata.thumbnail_url ||
-              `https://img.youtube.com/vi/${videoId}/0.jpg`,
-            embedUrl,
-            segments,
-            transcriptSource,
-            duration: metadata.duration || 0,
-          },
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate, proxy-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-            "Surrogate-Control": "no-store",
-          },
-        }
-      );
-    } catch (processingError: any) {
-      const responseTime = Date.now() - startTime;
-      console.error(
-        `[API] Error processing video data (${responseTime}ms):`,
-        processingError
-      );
-
-      // Return minimal data when processing fails
-      return new NextResponse(
-        JSON.stringify({
-          data: {
-            videoId,
-            title: "Video Information Unavailable",
-            author: "Unknown Creator",
-            thumbnailUrl: `https://img.youtube.com/vi/${videoId}/0.jpg`,
-            embedUrl: convertToEmbedUrl(youtubeUrl),
-            segments: [],
-            transcriptSource: "unavailable",
-            error: processingError.message || "Unknown processing error",
-          },
-        }),
-        {
-          status: 200, // Still return 200 to allow fallback behavior on client
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate, proxy-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-            "Surrogate-Control": "no-store",
-          },
-        }
-      );
-    }
+    // Return the response from the Express server
+    return NextResponse.json(data, {
+      status: response.status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control":
+          "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+        "Surrogate-Control": "no-store",
+      },
+    });
   } catch (error: any) {
     const responseTime = Date.now() - startTime;
     console.error(`[API] Critical error (${responseTime}ms):`, error);
 
-    return new NextResponse(
-      JSON.stringify({
+    return NextResponse.json(
+      {
         error:
           "Failed to process YouTube URL: " + (error.message || String(error)),
         stack: process.env.NODE_ENV !== "production" ? error.stack : undefined,
-      }),
+      },
       {
         status: 500,
         headers: {
