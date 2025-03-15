@@ -31,11 +31,13 @@ export default function ShortVideosPage() {
         if (user) {
           const fetchedVideos = await getPodcasts();
           // Filter to only include short videos
-          const shortVideos = fetchedVideos.filter((video) => video.isShort);
+          const shortVideos = fetchedVideos.filter(
+            (video: any) => video.isShort
+          );
           // Add unique videos from the fetched list (avoid duplicating the sample)
           videos = [
             ...videos,
-            ...shortVideos.filter((v) => v.id !== sampleYoutubeShort.id),
+            ...shortVideos.filter((v: any) => v.id !== sampleYoutubeShort.id),
           ];
         }
 

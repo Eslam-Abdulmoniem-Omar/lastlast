@@ -192,7 +192,7 @@ function AddYouTubeShortPage() {
   };
 
   const removeTopic = (topicToRemove: string) => {
-    setTopics(topics.filter((topic) => topic !== topicToRemove));
+    setTopics(topics.filter((topic: string) => topic !== topicToRemove));
   };
 
   const handleAddSegment = () => {
@@ -224,7 +224,9 @@ function AddYouTubeShortPage() {
   const handleRemoveSegment = (index: number) => {
     // Show confirmation toast
     toast.success("Segment removed");
-    setDialogueSegments(dialogueSegments.filter((_, i) => i !== index));
+    setDialogueSegments(
+      dialogueSegments.filter((_: any, i: number) => i !== index)
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

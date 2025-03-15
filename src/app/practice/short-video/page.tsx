@@ -370,7 +370,7 @@ const generateVocabularyItems = (segments: DialogueSegment[]) => {
   // This is a placeholder function that would ideally extract real vocabulary
   // For now, we'll generate some sample vocabulary items
   const allText = segments.map((segment) => segment.text).join(" ");
-  const words = allText.split(/\s+/).filter((word) => word.length > 4);
+  const words = allText.split(/\s+/).filter((word: string) => word.length > 4);
   const uniqueWords = [...new Set(words)].slice(0, 8);
 
   const partsOfSpeech = ["noun", "verb", "adjective", "adverb"];

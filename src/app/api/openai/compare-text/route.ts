@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
       const isVerySimilar = normalizedUserSpeech === normalizedOriginalSentence;
       const containsMainWords = normalizedOriginalSentence
         .split(/\s+/)
-        .filter((word) => word.length > 3)
-        .some((word) => normalizedUserSpeech.includes(word));
+        .filter((word: string) => word.length > 3)
+        .some((word: string) => normalizedUserSpeech.includes(word));
 
       return NextResponse.json({
         isCorrect: isVerySimilar || containsMainWords,

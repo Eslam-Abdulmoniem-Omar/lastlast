@@ -861,7 +861,7 @@ async function fetchYouTubeTranscript(
             const sentences = description
               .split(/[.!?]+/)
               .map((s) => s.trim())
-              .filter((s) => s.length > 5 && s.length < 200);
+              .filter((s: string) => s.length > 5 && s.length < 200);
 
             if (sentences.length > 3) {
               console.log(
