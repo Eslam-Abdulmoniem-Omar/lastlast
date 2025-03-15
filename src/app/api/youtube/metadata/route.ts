@@ -660,7 +660,7 @@ async function fetchYouTubeTranscript(
         const html = await response.text();
 
         // Look for transcript data in the HTML
-        const captionTrackPattern = /"captionTracks":\[.*?\]/s;
+        const captionTrackPattern = /"captionTracks":\[[\s\S]*?\]/;
         const match = html.match(captionTrackPattern);
 
         if (match && match[0]) {
