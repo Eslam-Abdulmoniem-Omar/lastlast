@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
 const axios = require("axios");
+const { DOMParser } = require("xmldom");
 const HttpsProxyAgent = require("https-proxy-agent");
 require("dotenv").config();
 
@@ -12,28 +13,36 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Webshare proxy configuration
+// Webshare proxy configuration - follows the Python library's implementation
 class WebshareProxyConfig {
-  constructor(username, password, domain = "p.webshare.io", port = 80) {
-    this.username = username;
-    this.password = password;
-    this.domain = domain;
-    this.port = port;
+  constructor(
+    proxyUsername,
+    proxyPassword,
+    domainName = "p.webshare.io",
+    proxyPort = 80
+  ) {
+    this.proxyUsername = proxyUsername;
+    this.proxyPassword = proxyPassword;
+    this.domainName = domainName;
+    this.proxyPort = proxyPort;
   }
 
-  getProxyUrl() {
-    return `http://${this.username}-rotate:${this.password}@${this.domain}:${this.port}`;
+  // Return URL in the same format as the Python implementation
+  get url() {
+    return `http://${this.proxyUsername}-rotate:${this.proxyPassword}@${this.domainName}:${this.proxyPort}/`;
   }
 
-  getAxiosConfig() {
-    const proxyUrl = this.getProxyUrl();
+  // Convert to requests library format (used by axios)
+  toRequestsDict() {
     return {
-      httpsAgent: new HttpsProxyAgent(proxyUrl),
-      proxy: false, // Disable axios's default proxy handling
-      headers: {
-        Connection: "close", // Prevent keeping connections alive for rotating proxies
-      },
+      http: this.url,
+      https: this.url,
     };
+  }
+
+  // Should we prevent keeping connections alive?
+  preventKeepingConnectionsAlive() {
+    return true; // For rotating proxies, don't keep connections alive
   }
 }
 
@@ -72,84 +81,114 @@ function parseDuration(duration) {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
-// YouTube transcript fetcher class
-class YouTubeTranscriptFetcher {
-  constructor(proxyConfig = null) {
-    this.proxyConfig = proxyConfig;
-    this.axiosConfig = proxyConfig ? proxyConfig.getAxiosConfig() : {};
+// YouTube Transcript API implementation - follows the Python library's structure
+class YouTubeTranscriptApi {
+  constructor(cookiePath = null, proxyConfig = null, httpClient = null) {
+    // Set up HTTP client (axios) with proxies if provided
+    this.axiosConfig = {};
+
+    if (proxyConfig) {
+      const proxies = proxyConfig.toRequestsDict();
+
+      // Configure axios to use the proxy
+      this.axiosConfig.proxy = false; // Disable axios automatic proxy
+      this.axiosConfig.httpsAgent = new HttpsProxyAgent(proxies.https);
+
+      // If we should prevent keeping connections alive
+      if (proxyConfig.preventKeepingConnectionsAlive()) {
+        this.axiosConfig.headers = {
+          Connection: "close",
+        };
+      }
+    }
+
+    // Set additional headers like the Python library
+    this.axiosConfig.headers = {
+      ...(this.axiosConfig.headers || {}),
+      "Accept-Language": "en-US",
+    };
   }
 
-  async fetchTranscript(videoId, lang = "en") {
+  async fetchTranscript(videoId, languages = ["en"]) {
+    const videoInfoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log(`Fetching video info from ${videoInfoUrl}`);
+    console.log("Using axios config:", JSON.stringify(this.axiosConfig));
+
     try {
-      // First, get the video info to check if transcripts are available
-      const videoInfoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      // Get the video page
       const response = await axios.get(videoInfoUrl, this.axiosConfig);
-
-      // Extract transcript data from the response
       const html = response.data;
-      const captionTracks = this.extractCaptionTracks(html);
 
-      if (!captionTracks || captionTracks.length === 0) {
-        throw new Error("No transcripts available for this video");
+      // Extract player response data
+      const playerResponseMatch = html.match(/"playerResponse":(\{.*?\}\});/);
+      if (!playerResponseMatch) {
+        throw new Error("Could not extract playerResponse from YouTube page");
       }
 
-      // Find the requested language or fallback to first available
-      const track =
-        this.findLanguageTrack(captionTracks, lang) || captionTracks[0];
+      const playerResponse = JSON.parse(playerResponseMatch[1]);
 
-      // Fetch the actual transcript data
+      // Extract caption tracks
+      const captionTracks =
+        playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (!captionTracks || captionTracks.length === 0) {
+        throw new Error("No captions available for this video");
+      }
+
+      // Find the required language
+      let selectedTrack = null;
+      for (const langCode of languages) {
+        selectedTrack = captionTracks.find(
+          (track) => track.languageCode === langCode
+        );
+        if (selectedTrack) break;
+      }
+
+      // If no matching language found, use the first available
+      if (!selectedTrack) {
+        selectedTrack = captionTracks[0];
+      }
+
+      // Fetch the transcript XML
+      console.log(`Fetching transcript from ${selectedTrack.baseUrl}`);
       const transcriptResponse = await axios.get(
-        track.baseUrl,
+        selectedTrack.baseUrl,
         this.axiosConfig
       );
-      const transcript = this.parseTranscriptData(transcriptResponse.data);
+      const transcriptXml = transcriptResponse.data;
 
-      return transcript;
+      // Parse the transcript XML
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(transcriptXml, "text/xml");
+      const textElements = xmlDoc.getElementsByTagName("text");
+
+      // Convert to the required format
+      const segments = [];
+      for (let i = 0; i < textElements.length; i++) {
+        const element = textElements[i];
+        const text = element.textContent;
+        const startTime = parseFloat(element.getAttribute("start") || 0);
+        const duration = parseFloat(element.getAttribute("dur") || 0);
+
+        segments.push({
+          id: uuidv4(),
+          speakerName: i % 2 === 0 ? "Speaker A" : "Speaker B",
+          text,
+          startTime,
+          endTime: startTime + duration,
+          vocabularyItems: [],
+        });
+      }
+
+      return {
+        segments,
+        language: selectedTrack.languageCode,
+        language_name:
+          selectedTrack.name?.simpleText || selectedTrack.languageCode,
+      };
     } catch (error) {
-      console.error("Error fetching transcript:", error);
+      console.error("Error fetching transcript:", error.message);
       throw error;
     }
-  }
-
-  extractCaptionTracks(html) {
-    try {
-      const playerResponse = JSON.parse(
-        html.match(/"playerResponse":({.*?});/)[1]
-      );
-      return (
-        playerResponse.captions?.playerCaptionsTracklistRenderer
-          ?.captionTracks || []
-      );
-    } catch (error) {
-      console.error("Error extracting caption tracks:", error);
-      return [];
-    }
-  }
-
-  findLanguageTrack(tracks, langCode) {
-    return tracks.find((track) => track.languageCode === langCode);
-  }
-
-  parseTranscriptData(xmlData) {
-    // Parse the XML transcript data and convert to our format
-    const segments = [];
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlData, "text/xml");
-    const textNodes = doc.getElementsByTagName("text");
-
-    for (let i = 0; i < textNodes.length; i++) {
-      const node = textNodes[i];
-      segments.push({
-        id: uuidv4(),
-        text: node.textContent,
-        startTime: parseFloat(node.getAttribute("start")),
-        duration: parseFloat(node.getAttribute("dur")),
-        speakerName: i % 2 === 0 ? "Speaker A" : "Speaker B",
-        vocabularyItems: [],
-      });
-    }
-
-    return segments;
   }
 }
 
@@ -157,6 +196,7 @@ class YouTubeTranscriptFetcher {
 app.get("/api/transcript", async (req, res) => {
   const startTime = Date.now();
   const { url } = req.query;
+  const debug = req.query.debug === "true";
 
   if (!url) {
     return res.status(400).json({ error: "YouTube URL is required" });
@@ -170,41 +210,62 @@ app.get("/api/transcript", async (req, res) => {
         .json({ error: "Could not extract video ID from URL" });
     }
 
-    // Initialize the transcript fetcher with Webshare proxy config
+    // Initialize the proxy with Webshare credentials
     const proxyConfig = new WebshareProxyConfig(
       process.env.WEBSHARE_USERNAME,
       process.env.WEBSHARE_PASSWORD
     );
 
-    const transcriptFetcher = new YouTubeTranscriptFetcher(proxyConfig);
+    // Initialize the API with the proxy config
+    const api = new YouTubeTranscriptApi(null, proxyConfig);
 
-    // Fetch transcript
-    const segments = await transcriptFetcher.fetchTranscript(videoId);
+    console.log(`Fetching transcript for video ID: ${videoId}`);
+    console.log(`Proxy URL: ${proxyConfig.url}`);
+
+    // Fetch the transcript
+    const transcript = await api.fetchTranscript(videoId);
 
     const responseTime = Date.now() - startTime;
     console.log(`Request completed in ${responseTime}ms`);
 
+    // Return the transcript data
     return res.json({
       data: {
         videoId,
-        segments,
+        segments: transcript.segments,
         transcriptSource: "youtube-transcript-api",
+        language: transcript.language,
+        language_name: transcript.language_name,
       },
     });
   } catch (error) {
     console.error("Error processing request:", error);
+
+    // More detailed error response for debugging
     return res.status(500).json({
       error: "Failed to process YouTube URL",
       details: error.message,
+      stack: debug ? error.stack : undefined,
     });
   }
 });
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    proxyConfig: {
+      username: process.env.WEBSHARE_USERNAME ? "✓ configured" : "✗ missing",
+      password: process.env.WEBSHARE_PASSWORD ? "✓ configured" : "✗ missing",
+    },
+  });
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  console.log(
+    `Webshare proxy credentials: ${
+      process.env.WEBSHARE_USERNAME ? "✓ configured" : "✗ missing"
+    }`
+  );
 });
