@@ -94,24 +94,15 @@ Only respond with valid JSON.`,
       temperature: 0.3, // Lower temperature for more consistent results
     });
 
-    console.log("OpenAI API Raw Response:", JSON.stringify(response, null, 2));
-
-    // Parse the response with robust error handling
-    const content = response.choices?.[0]?.message?.content || "{}";
-    let result;
-
-    try {
-      result = JSON.parse(content);
-    } catch (error) {
-      console.error("Failed to parse OpenAI response:", error);
-      // Provide a default response if parsing fails
-      result = {
-        isMatch: true,
-        accuracy: 0.7,
-        missingWords: [],
-        feedback: "Good attempt! (Response parsing error occurred)",
-      };
+    // Parse the response with proper null checking
+    const content = response.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Invalid or empty response from OpenAI");
     }
+    const result = JSON.parse(content);
+
+    // Remove log that exposes result data
+    // console.log("Comparison result:", result);
 
     return NextResponse.json(result);
   } catch (error) {

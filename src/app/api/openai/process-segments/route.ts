@@ -98,22 +98,8 @@ Important guidelines:
         max_tokens: 1000,
       });
 
-      // Log the response for debugging (with truncated content to avoid massive logs)
-      console.log(`OpenAI API Response for segment ${segment.id} (truncated):`, 
-        JSON.stringify({
-          ...response,
-          choices: response.choices?.map(c => ({
-            ...c,
-            message: { 
-              ...c.message,
-              content: c.message?.content?.substring(0, 50) + "..." 
-            }
-          }))
-        }, null, 2)
-      );
-
-      // Extract the response content with safer null handling
-      const content = response.choices?.[0]?.message?.content?.trim() || "";
+      // Extract the response content
+      const content = response.choices[0]?.message?.content?.trim();
 
       if (!content) {
         console.warn(`Empty response from OpenAI for segment: ${segment.id}`);
@@ -126,17 +112,9 @@ Important guidelines:
 
       try {
         // Extract the JSON array from the response
-        const jsonMatch = content.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+        const jsonMatch = content.match(/\[\s*\{.*\}\s*\]/s);
         const jsonStr = jsonMatch ? jsonMatch[0] : content;
-        let sentences;
-        
-        try {
-          sentences = JSON.parse(jsonStr);
-        } catch (parseError) {
-          console.error(`JSON parse error for segment ${segment.id}:`, parseError);
-          console.log("Attempted to parse:", jsonStr);
-          throw new Error("Failed to parse JSON response");
-        }
+        const sentences = JSON.parse(jsonStr);
 
         if (!Array.isArray(sentences) || sentences.length === 0) {
           throw new Error("Invalid response format");
