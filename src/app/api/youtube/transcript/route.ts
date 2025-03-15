@@ -1,9 +1,10 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 
 // Route segment configuration
-export const dynamic = "force-dynamic"; // Prevent static optimization
 export const runtime = "edge"; // Use edge runtime for better performance
 export const fetchCache = "force-no-store"; // Prevent caching
 export const revalidate = 0; // Prevent static generation
