@@ -1,7 +1,9 @@
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.proxies import WebshareProxyConfig
 import re
 import sys
 import json
+import os
 
 def extract_video_id(url):
     """Extract YouTube Video ID from URL"""
@@ -23,7 +25,24 @@ def extract_video_id(url):
 def get_transcript_with_timestamps(video_id):
     """Get transcript with timestamps for a YouTube video"""
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        # Get proxy credentials from environment variables
+        proxy_username = os.environ.get('WEBSHARE_PROXY_USERNAME', '')
+        proxy_password = os.environ.get('WEBSHARE_PROXY_PASSWORD', '')
+        
+        # Configure proxy if credentials are available
+        if proxy_username and proxy_password:
+            proxy_config = WebshareProxyConfig(
+                proxy_username=proxy_username,
+                proxy_password=proxy_password
+            )
+            
+            # Create instance with proxy config
+            ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+            transcript = ytt_api.get_transcript(video_id)
+        else:
+            # Fallback to standard method if no proxy credentials
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            
         return transcript
     except Exception as e:
         return {"error": str(e)}
