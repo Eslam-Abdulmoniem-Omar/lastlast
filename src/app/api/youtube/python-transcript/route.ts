@@ -1,15 +1,11 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { exec } from "child_process";
 import { promisify } from "util";
 import path from "path";
-
-// Route segment configuration
-export const dynamic = "force-dynamic"; // Prevent static optimization
-export const runtime = "nodejs"; // Use nodejs runtime since we need child_process
-export const fetchCache = "force-no-store"; // Prevent caching
-export const revalidate = 0; // Prevent static generation
 
 const execPromise = promisify(exec);
 

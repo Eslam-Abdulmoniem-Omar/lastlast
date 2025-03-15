@@ -1,12 +1,11 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { YoutubeTranscript } from "youtube-transcript";
 import { OpenAI } from "openai";
 import axios from "axios";
-
-// Set dynamic to force runtime execution for each request
-export const dynamic = "force-dynamic";
 
 // Set a longer timeout for the API function (config is handled differently in App Router)
 export const maxDuration = 60; // 60 seconds maximum duration
@@ -1186,56 +1185,189 @@ export async function GET(request: Request) {
     );
     console.log(`[API] Processing URL: ${youtubeUrl}`);
     console.log(`[API] Cache buster: ${cacheBuster || "none"}`);
+    console.log(
+      `[API] Request headers: ${JSON.stringify(
+        Object.fromEntries(request.headers),
+        null,
+        2
+      )}`
+    );
 
     if (!youtubeUrl) {
-      return NextResponse.json(
-        { error: "YouTube URL is required" },
-        { status: 400 }
+      const responseTime = Date.now() - startTime;
+      console.log(`[API] Error: Missing URL parameter (${responseTime}ms)`);
+
+      return new NextResponse(
+        JSON.stringify({
+          error: "YouTube URL is required",
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        }
       );
     }
 
-    // Forward the request to the Express server
-    const expressServerUrl =
-      process.env.EXPRESS_SERVER_URL || "http://localhost:3001";
-    const response = await fetch(
-      `${expressServerUrl}/api/transcript?url=${encodeURIComponent(
-        youtubeUrl
-      )}`,
-      {
-        headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate, proxy-revalidate",
-          Pragma: "no-cache",
-        },
+    // Extract video ID
+    const videoId = extractVideoId(youtubeUrl);
+    if (!videoId) {
+      const responseTime = Date.now() - startTime;
+      console.log(
+        `[API] Error: Could not extract video ID (${responseTime}ms)`
+      );
+
+      return new NextResponse(
+        JSON.stringify({
+          error: "Could not extract video ID from URL",
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        }
+      );
+    }
+
+    console.log(`[API] Extracted video ID: ${videoId}`);
+
+    try {
+      // Fetch basic metadata first
+      const metadata = await fetchVideoMetadata(videoId);
+      const embedUrl = convertToEmbedUrl(youtubeUrl);
+
+      // Check if video is too long
+      if (metadata.isTooLong) {
+        const responseTime = Date.now() - startTime;
+        console.log(
+          `[API] Error: Video too long (${metadata.duration}s) (${responseTime}ms)`
+        );
+
+        return new NextResponse(
+          JSON.stringify({
+            error: "Video is too long (maximum 2 minutes allowed)",
+            data: {
+              videoId,
+              title: metadata.title || "Video Title",
+              author: metadata.author_name || "Unknown Creator",
+              thumbnailUrl:
+                metadata.thumbnail_url ||
+                `https://img.youtube.com/vi/${videoId}/0.jpg`,
+              embedUrl,
+              duration: metadata.duration,
+              isTooLong: true,
+            },
+          }),
+          {
+            status: 413, // Payload Too Large
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control":
+                "no-store, no-cache, must-revalidate, proxy-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
+          }
+        );
       }
-    );
 
-    const data = await response.json();
-    const responseTime = Date.now() - startTime;
-    console.log(`[API] Request completed in ${responseTime}ms`);
+      // Then fetch transcript with multiple fallback methods
+      const transcriptResult = await fetchYouTubeTranscript(
+        videoId,
+        metadata.title
+      );
 
-    // Return the response from the Express server
-    return NextResponse.json(data, {
-      status: response.status,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control":
-          "no-store, no-cache, must-revalidate, proxy-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
-        "Surrogate-Control": "no-store",
-      },
-    });
+      const segments = transcriptResult.segments;
+      const transcriptSource = transcriptResult.source;
+
+      // Log completion information
+      const responseTime = Date.now() - startTime;
+      console.log(`[API] Request completed in ${responseTime}ms`);
+      console.log(`[API] Transcript source: ${transcriptSource}`);
+      console.log(`[API] Segments count: ${segments.length}`);
+
+      // Return the response with appropriate headers to prevent caching
+      return new NextResponse(
+        JSON.stringify({
+          data: {
+            videoId,
+            title: metadata.title || "Video Title",
+            author: metadata.author_name || "Unknown Creator",
+            thumbnailUrl:
+              metadata.thumbnail_url ||
+              `https://img.youtube.com/vi/${videoId}/0.jpg`,
+            embedUrl,
+            segments,
+            transcriptSource,
+            duration: metadata.duration || 0,
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+            "Surrogate-Control": "no-store",
+          },
+        }
+      );
+    } catch (processingError: any) {
+      const responseTime = Date.now() - startTime;
+      console.error(
+        `[API] Error processing video data (${responseTime}ms):`,
+        processingError
+      );
+
+      // Return minimal data when processing fails
+      return new NextResponse(
+        JSON.stringify({
+          data: {
+            videoId,
+            title: "Video Information Unavailable",
+            author: "Unknown Creator",
+            thumbnailUrl: `https://img.youtube.com/vi/${videoId}/0.jpg`,
+            embedUrl: convertToEmbedUrl(youtubeUrl),
+            segments: [],
+            transcriptSource: "unavailable",
+            error: processingError.message || "Unknown processing error",
+          },
+        }),
+        {
+          status: 200, // Still return 200 to allow fallback behavior on client
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+            "Surrogate-Control": "no-store",
+          },
+        }
+      );
+    }
   } catch (error: any) {
     const responseTime = Date.now() - startTime;
     console.error(`[API] Critical error (${responseTime}ms):`, error);
 
-    return NextResponse.json(
-      {
+    return new NextResponse(
+      JSON.stringify({
         error:
           "Failed to process YouTube URL: " + (error.message || String(error)),
         stack: process.env.NODE_ENV !== "production" ? error.stack : undefined,
-      },
+      }),
       {
         status: 500,
         headers: {

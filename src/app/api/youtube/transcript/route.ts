@@ -4,11 +4,6 @@ import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 
-// Route segment configuration
-export const runtime = "edge"; // Use edge runtime for better performance
-export const fetchCache = "force-no-store"; // Prevent caching
-export const revalidate = 0; // Prevent static generation
-
 // Function to extract video ID from YouTube URL
 function extractVideoId(url: string): string | null {
   // Extract video ID from various YouTube URL formats
