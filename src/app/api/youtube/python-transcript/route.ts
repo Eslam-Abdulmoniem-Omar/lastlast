@@ -73,7 +73,7 @@ function addIdsToSegments(segments: any[]): DialogueSegment[] {
 }
 
 export async function GET(request: Request) {
-  // Get the YouTube URL from the query parameters
+  // Move searchParams access outside the try/catch block
   const { searchParams } = new URL(request.url);
   const youtubeUrl = searchParams.get("url");
 
@@ -111,12 +111,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error("Error in Python transcript API:", error);
 
-    return NextResponse.json(
-      {
-        error: "Failed to fetch transcript",
-        details: error.message,
-      },
-      { status: 500 }
-    );
+    // Re-throw the error for Next.js to detect dynamic usage
+    throw error;
   }
 }

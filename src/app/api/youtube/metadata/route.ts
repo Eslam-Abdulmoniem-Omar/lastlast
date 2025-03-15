@@ -1174,46 +1174,46 @@ function createSimpleSegments(
 export async function GET(request: Request) {
   const startTime = Date.now();
 
+  // Move searchParams access outside the try/catch block
+  const { searchParams } = new URL(request.url);
+  const youtubeUrl = searchParams.get("url");
+  const cacheBuster = searchParams.get("t"); // Cache buster parameter
+
+  console.log(
+    `[API] YouTube metadata request received at ${new Date().toISOString()}`
+  );
+  console.log(`[API] Processing URL: ${youtubeUrl}`);
+  console.log(`[API] Cache buster: ${cacheBuster || "none"}`);
+  console.log(
+    `[API] Request headers: ${JSON.stringify(
+      Object.fromEntries(request.headers),
+      null,
+      2
+    )}`
+  );
+
+  if (!youtubeUrl) {
+    const responseTime = Date.now() - startTime;
+    console.log(`[API] Error: Missing URL parameter (${responseTime}ms)`);
+
+    return new NextResponse(
+      JSON.stringify({
+        error: "YouTube URL is required",
+      }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
+  }
+
   try {
-    // Parse the URL and extract query parameters
-    const { searchParams } = new URL(request.url);
-    const youtubeUrl = searchParams.get("url");
-    const cacheBuster = searchParams.get("t"); // Cache buster parameter
-
-    console.log(
-      `[API] YouTube metadata request received at ${new Date().toISOString()}`
-    );
-    console.log(`[API] Processing URL: ${youtubeUrl}`);
-    console.log(`[API] Cache buster: ${cacheBuster || "none"}`);
-    console.log(
-      `[API] Request headers: ${JSON.stringify(
-        Object.fromEntries(request.headers),
-        null,
-        2
-      )}`
-    );
-
-    if (!youtubeUrl) {
-      const responseTime = Date.now() - startTime;
-      console.log(`[API] Error: Missing URL parameter (${responseTime}ms)`);
-
-      return new NextResponse(
-        JSON.stringify({
-          error: "YouTube URL is required",
-        }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate, proxy-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        }
-      );
-    }
-
     // Extract video ID
     const videoId = extractVideoId(youtubeUrl);
     if (!videoId) {
@@ -1362,22 +1362,7 @@ export async function GET(request: Request) {
     const responseTime = Date.now() - startTime;
     console.error(`[API] Critical error (${responseTime}ms):`, error);
 
-    return new NextResponse(
-      JSON.stringify({
-        error:
-          "Failed to process YouTube URL: " + (error.message || String(error)),
-        stack: process.env.NODE_ENV !== "production" ? error.stack : undefined,
-      }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate, proxy-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      }
-    );
+    // Re-throw the error for Next.js to detect dynamic usage
+    throw error;
   }
 }

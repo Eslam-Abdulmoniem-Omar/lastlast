@@ -67,19 +67,20 @@ function createDefaultSegments(): DialogueSegment[] {
 }
 
 export async function GET(request: Request) {
+  // Move searchParams access outside the try/catch block
+  const { searchParams } = new URL(request.url);
+  const youtubeUrl = searchParams.get("url");
+
+  if (!youtubeUrl) {
+    return NextResponse.json(
+      { error: "YouTube URL is required" },
+      { status: 400 }
+    );
+  }
+
+  console.log("Processing YouTube URL:", youtubeUrl);
+
   try {
-    const { searchParams } = new URL(request.url);
-    const youtubeUrl = searchParams.get("url");
-
-    if (!youtubeUrl) {
-      return NextResponse.json(
-        { error: "YouTube URL is required" },
-        { status: 400 }
-      );
-    }
-
-    console.log("Processing YouTube URL:", youtubeUrl);
-
     // Extract video ID
     const videoId = extractVideoId(youtubeUrl);
     if (!videoId) {
@@ -102,13 +103,8 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("Error processing YouTube URL:", error);
-    return NextResponse.json(
-      {
-        error:
-          "Failed to process YouTube URL: " +
-          (error instanceof Error ? error.message : String(error)),
-      },
-      { status: 500 }
-    );
+
+    // Re-throw the error for Next.js to detect dynamic usage
+    throw error;
   }
 }
