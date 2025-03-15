@@ -136,6 +136,20 @@ function AddYouTubeShortPage() {
             setTitle(data.title || "Untitled Video");
             setEmbedUrl(data.embedUrl || "");
 
+            // Check if video is too long (metadata now includes duration in seconds)
+            if (data.isTooLong === true) {
+              toast.dismiss();
+              toast.error(
+                "This video is too long. Please use videos under 2 minutes in length."
+              );
+              setError(
+                "Video length exceeds the maximum of 2 minutes. Please select a shorter video."
+              );
+              setIsLoading(false);
+              setIsProcessing(false);
+              return;
+            }
+
             // Use the segments from metadata response
             if (data.segments && data.segments.length > 0) {
               console.log(
@@ -162,21 +176,24 @@ function AddYouTubeShortPage() {
             }
           },
           onError: (error) => {
-            console.error("Client: Error in transcript fetch:", error);
-            setError(
-              `Failed to fetch YouTube data: ${
-                error instanceof Error ? error.message : "Unknown error"
-              }`
-            );
+            console.error("Client: Transcript fetch error:", error);
 
-            // Keep the segments array empty on error
-            setDialogueSegments([]);
-            setTranscriptSource("unavailable");
-
-            // Show error toast
-            toast.error(
-              "Failed to fetch transcript. You'll need to add segments manually."
-            );
+            // Check if error is related to video length
+            if (error.includes && error.includes("too long")) {
+              toast.error(
+                "This video is too long. Please use videos under 2 minutes in length."
+              );
+              setError(
+                "Video length exceeds the maximum of 2 minutes. Please select a shorter video."
+              );
+            } else {
+              toast.error("Failed to process video. Try another YouTube URL.");
+              setError(
+                `Failed to process video: ${
+                  error.message || error.toString() || "Unknown error"
+                }`
+              );
+            }
           },
           onComplete: () => {
             console.log("Client: Transcript fetch complete");
@@ -186,19 +203,24 @@ function AddYouTubeShortPage() {
         });
 
         console.log("Client: fetchYoutubeTranscript call completed");
-      } catch (error) {
-        console.error(
-          "Client: Unexpected error in fetchTranscript wrapper:",
-          error
-        );
-        setIsLoading(false);
-        setIsProcessing(false);
-        setError(
-          "An unexpected error occurred while fetching the transcript. Please try again."
-        );
-        toast.error(
-          "Failed to process video. Please try again or use a different URL."
-        );
+      } catch (err: any) {
+        console.error("Client: Error in fetchYoutubeTranscript:", err);
+
+        // Check if error response contains information about video length
+        if (
+          err.response?.data?.isTooLong ||
+          (err.message && err.message.includes("too long"))
+        ) {
+          toast.error(
+            "This video is too long. Please use videos under 2 minutes in length."
+          );
+          setError(
+            "Video length exceeds the maximum of 2 minutes. Please select a shorter video."
+          );
+        } else {
+          toast.error("Failed to process video. Try another YouTube URL.");
+          setError(`Error: ${err.message || "Failed to process video"}`);
+        }
       }
     } catch (error) {
       console.error("Client: Critical error in fetchTranscript:", error);

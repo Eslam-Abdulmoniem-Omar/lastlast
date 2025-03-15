@@ -24,11 +24,11 @@ export const extractVideoId = (url: string): string | null => {
     const urlParams = new URLSearchParams(new URL(url).search);
     videoId = urlParams.get("v");
   } else if (url.includes("youtu.be")) {
-    videoId = url.split("youtu.be/")[1].split("?")[0];
+    videoId = url.split("youtu.be/")[1]?.split("?")[0];
   } else if (url.includes("youtube.com/embed")) {
-    videoId = url.split("youtube.com/embed/")[1].split("?")[0];
+    videoId = url.split("youtube.com/embed/")[1]?.split("?")[0];
   } else if (url.includes("youtube.com/shorts")) {
-    videoId = url.split("youtube.com/shorts/")[1].split("?")[0];
+    videoId = url.split("youtube.com/shorts/")[1]?.split("?")[0];
   }
 
   return videoId;
@@ -49,9 +49,28 @@ export const convertToEmbedUrl = (url: string): string => {
  * Creates default dialogue segments when a transcript is not available
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
-  // Return an empty array instead of default segments
-  console.log("[Utils] createDefaultSegments called - returning empty array");
-  return [];
+  const segments: DialogueSegment[] = [];
+  const segmentDuration = 5;
+  const segmentTexts = [
+    "Welcome to this video.",
+    "Today we'll be discussing an interesting topic.",
+    "I hope you find this content useful.",
+    "Let me know your thoughts in the comments.",
+    "Thank you for watching!",
+  ];
+
+  for (let i = 0; i < segmentTexts.length; i++) {
+    segments.push({
+      id: uuidv4(),
+      speakerName: "",
+      text: segmentTexts[i],
+      startTime: i * segmentDuration,
+      endTime: (i + 1) * segmentDuration,
+      vocabularyItems: [],
+    });
+  }
+
+  return segments;
 };
 
 /**
@@ -64,7 +83,7 @@ export const formatTime = (seconds: number): string => {
 };
 
 /**
- * Fetches transcript data from the YouTube API
+ * Fetches transcript data from the YouTube API with improved error handling and retry logic
  */
 export const fetchTranscript = async (
   url: string,
@@ -89,107 +108,165 @@ export const fetchTranscript = async (
 
     console.log("[Utils] Fetching transcript for:", url);
 
-    // Add a timeout for the fetch request
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      console.log("[Utils] Aborting fetch due to timeout");
-    }, 30000); // 30 second timeout
+    // Extract video ID for better error reporting
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+      throw new Error("Could not extract video ID from URL");
+    }
 
-    try {
-      // First, try to get the video metadata directly
-      const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
-        url
-      )}&t=${Date.now()}`; // Add timestamp to prevent caching
+    // Implementation with retry logic
+    const MAX_RETRIES = 2;
+    const TIMEOUT_MS = 10000; // 10 seconds instead of 30
 
-      console.log("[Utils] Fetching metadata from:", metadataUrl);
+    let lastError = null;
 
-      const metadataResponse = await fetch(metadataUrl, {
-        signal: controller.signal,
-        headers: {
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-        },
-      });
-
-      // Clear the timeout since the fetch completed
-      clearTimeout(timeoutId);
-
-      if (!metadataResponse.ok) {
-        const errorText = await metadataResponse.text();
-        console.error("[Utils] Metadata API error response:", errorText);
-        toast.dismiss();
-        throw new Error(
-          `API responded with ${metadataResponse.status}: ${errorText.substring(
-            0,
-            100
-          )}`
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        console.log(`[Utils] Retry attempt ${attempt} of ${MAX_RETRIES}`);
+        // Wait before retry with exponential backoff
+        await new Promise((r) =>
+          setTimeout(r, 1000 * Math.pow(2, attempt - 1))
         );
       }
 
-      const metadataJson = await metadataResponse.json();
-      console.log("[Utils] Metadata API response type:", typeof metadataJson);
-      console.log(
-        "[Utils] Metadata API response keys:",
-        Object.keys(metadataJson)
-      );
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.log("[Utils] Aborting fetch due to timeout");
+        }, TIMEOUT_MS);
 
-      const metaData = metadataJson.data;
+        // Add environment indicator and timestamp to help with debugging
+        const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
+          url
+        )}&t=${Date.now()}`;
 
-      if (!metaData) {
-        toast.dismiss();
-        throw new Error("No metadata returned from API");
-      }
+        console.log("[Utils] Fetching metadata from:", metadataUrl);
 
-      console.log(
-        "[Utils] Received metadata:",
-        JSON.stringify({
-          title: metaData.title || "No title",
-          segments: metaData.segments ? metaData.segments.length : 0,
-          transcriptSource: metaData.transcriptSource || "unknown",
-        })
-      );
-
-      // Process the response
-      const responseData = {
-        title: metaData.title || "",
-        embedUrl: metaData.embedUrl || "",
-        segments: metaData.segments || [],
-        transcriptSource: metaData.transcriptSource || "transcript",
-      };
-
-      if (callbacks.onSuccess) {
-        callbacks.onSuccess(responseData);
-      }
-
-      // Show appropriate success message based on transcript source
-      toast.dismiss();
-      if (
-        metaData.transcriptSource === "transcript" &&
-        metaData.segments &&
-        metaData.segments.length > 0
-      ) {
-        toast.success(
-          `Video loaded with transcript (${metaData.segments.length} segments)`,
-          { duration: 4000 }
-        );
-      } else if (metaData.segments && metaData.segments.length > 0) {
-        toast.success(`Video loaded (${metaData.segments.length} segments)`, {
-          duration: 4000,
+        const metadataResponse = await fetch(metadataUrl, {
+          signal: controller.signal,
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
         });
-      } else {
-        toast.error(
-          "No transcript available. You'll need to add segments manually."
+
+        // Clear the timeout since the fetch completed
+        clearTimeout(timeoutId);
+
+        if (!metadataResponse.ok) {
+          const errorText = await metadataResponse.text();
+          console.error(
+            `[Utils] Metadata API error response (${metadataResponse.status}):`,
+            errorText
+          );
+
+          // If we get a 429 (rate limit) or 503 (service unavailable), we should retry
+          if ([429, 503].includes(metadataResponse.status)) {
+            lastError = new Error(
+              `API rate limited: ${metadataResponse.status}`
+            );
+            continue; // Try next attempt
+          }
+
+          toast.dismiss();
+          throw new Error(
+            `API responded with ${
+              metadataResponse.status
+            }: ${errorText.substring(0, 100)}`
+          );
+        }
+
+        const metadataJson = await metadataResponse.json();
+        console.log(
+          "[Utils] Metadata API response keys:",
+          Object.keys(metadataJson)
         );
+
+        // Check if the API returned an error about video length
+        if (metadataJson.error && metadataJson.error.includes("too long")) {
+          toast.dismiss();
+          toast.error(
+            "This video is too long. Please use videos under 2 minutes in length."
+          );
+          throw new Error("Video is too long (maximum 2 minutes allowed)");
+        }
+
+        // Check if the data includes isTooLong flag
+        if (metadataJson.data && metadataJson.data.isTooLong) {
+          toast.dismiss();
+          toast.error(
+            "This video is too long. Please use videos under 2 minutes in length."
+          );
+          throw new Error("Video is too long (maximum 2 minutes allowed)");
+        }
+
+        const metaData = metadataJson.data;
+
+        if (!metaData) {
+          toast.dismiss();
+          throw new Error("No metadata returned from API");
+        }
+
+        console.log(
+          "[Utils] Received metadata:",
+          JSON.stringify({
+            title: metaData.title || "No title",
+            segments: metaData.segments ? metaData.segments.length : 0,
+            transcriptSource: metaData.transcriptSource || "unknown",
+          })
+        );
+
+        // Process the response
+        const responseData = {
+          title: metaData.title || "",
+          embedUrl: metaData.embedUrl || "",
+          segments: metaData.segments || [],
+          transcriptSource: metaData.transcriptSource || "transcript",
+        };
+
+        if (callbacks.onSuccess) {
+          callbacks.onSuccess(responseData);
+        }
+
+        // Show appropriate success message based on transcript source
+        toast.dismiss();
+        if (
+          metaData.transcriptSource === "transcript" &&
+          metaData.segments &&
+          metaData.segments.length > 0
+        ) {
+          toast.success(
+            `Video loaded with transcript (${metaData.segments.length} segments)`,
+            { duration: 4000 }
+          );
+        } else if (metaData.segments && metaData.segments.length > 0) {
+          toast.success(`Video loaded (${metaData.segments.length} segments)`, {
+            duration: 4000,
+          });
+        } else {
+          toast.error(
+            "No transcript available. You'll need to add segments manually."
+          );
+        }
+
+        return responseData;
+      } catch (fetchError: any) {
+        // Clear the timeout if the fetch failed
+        lastError = fetchError;
+        console.error(
+          `[Utils] Fetch error (attempt ${attempt + 1}/${MAX_RETRIES + 1}):`,
+          fetchError
+        );
+
+        // Only continue to retry if we haven't exceeded max retries
+        if (attempt < MAX_RETRIES) {
+          continue;
+        }
+
+        // If we've used all retries, throw the last error
+        throw fetchError;
       }
-
-      return responseData;
-    } catch (fetchError) {
-      // Clear the timeout if the fetch failed
-      clearTimeout(timeoutId);
-
-      console.error("[Utils] Fetch error:", fetchError);
-      throw fetchError;
     }
   } catch (error: any) {
     console.error("[Utils] Error fetching YouTube data:", error);
