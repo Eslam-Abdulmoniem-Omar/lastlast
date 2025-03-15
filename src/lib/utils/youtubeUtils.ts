@@ -47,30 +47,12 @@ export const convertToEmbedUrl = (url: string): string => {
 
 /**
  * Creates default dialogue segments when a transcript is not available
+ * Now returns an empty array to prevent showing generic segments
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
-  const segments: DialogueSegment[] = [];
-  const segmentDuration = 5;
-  const segmentTexts = [
-    "Welcome to this video.",
-    "Today we'll be discussing an interesting topic.",
-    "I hope you find this content useful.",
-    "Let me know your thoughts in the comments.",
-    "Thank you for watching!",
-  ];
-
-  for (let i = 0; i < segmentTexts.length; i++) {
-    segments.push({
-      id: uuidv4(),
-      speakerName: "",
-      text: segmentTexts[i],
-      startTime: i * segmentDuration,
-      endTime: (i + 1) * segmentDuration,
-      vocabularyItems: [],
-    });
-  }
-
-  return segments;
+  console.log("[Utils] createDefaultSegments called - returning empty array");
+  // Return empty array instead of default segments to prevent showing generic content
+  return [];
 };
 
 /**
@@ -116,7 +98,7 @@ export const fetchTranscript = async (
 
     // Implementation with retry logic
     const MAX_RETRIES = 2;
-    const TIMEOUT_MS = 10000; // 10 seconds instead of 30
+    const TIMEOUT_MS = 8000; // Reducing timeout for Vercel environment
 
     let lastError = null;
 
@@ -136,19 +118,24 @@ export const fetchTranscript = async (
           console.log("[Utils] Aborting fetch due to timeout");
         }, TIMEOUT_MS);
 
-        // Add environment indicator and timestamp to help with debugging
+        // Add better caching prevention with random query param
+        const timestamp = Date.now();
+        const randomBuster = Math.floor(Math.random() * 10000);
         const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
           url
-        )}&t=${Date.now()}`;
+        )}&t=${timestamp}&r=${randomBuster}`;
 
         console.log("[Utils] Fetching metadata from:", metadataUrl);
 
         const metadataResponse = await fetch(metadataUrl, {
           signal: controller.signal,
           headers: {
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
             Pragma: "no-cache",
+            Expires: "0",
           },
+          // Add next's cache directive for edge cases
+          next: { revalidate: 0 },
         });
 
         // Clear the timeout since the fetch completed
@@ -217,12 +204,49 @@ export const fetchTranscript = async (
           })
         );
 
+        // Verify we have segments with actual content
+        if (metaData.segments && metaData.segments.length > 0) {
+          // Check that we don't have empty or generic segments
+          const hasRealContent = metaData.segments.some(
+            (segment: DialogueSegment) =>
+              segment.text &&
+              segment.text.length > 10 &&
+              ![
+                "Welcome to this video.",
+                "Today we'll be discussing an interesting topic.",
+                "I hope you find this content useful.",
+                "Let me know your thoughts in the comments.",
+                "Thank you for watching!",
+              ].includes(segment.text.trim())
+          );
+
+          if (!hasRealContent) {
+            console.warn(
+              "[Utils] Segments look like generic placeholders, retrying..."
+            );
+            if (attempt < MAX_RETRIES) {
+              continue; // Try again
+            } else {
+              // If we've exhausted retries, return empty segments
+              metaData.segments = [];
+              metaData.transcriptSource = "unavailable";
+
+              toast.dismiss();
+              toast.error(
+                "Could not retrieve transcript. You'll need to add segments manually."
+              );
+            }
+          }
+        }
+
         // Process the response
         const responseData = {
           title: metaData.title || "",
           embedUrl: metaData.embedUrl || "",
           segments: metaData.segments || [],
           transcriptSource: metaData.transcriptSource || "transcript",
+          duration: metaData.duration || 0,
+          isTooLong: metaData.isTooLong || false,
         };
 
         if (callbacks.onSuccess) {

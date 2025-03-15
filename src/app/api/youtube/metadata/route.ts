@@ -535,117 +535,168 @@ async function fetchYouTubeTranscript(
 
   // Use AbortController for timeout
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // Reduced to 8 seconds for Vercel
 
   try {
-    // Method 1: Try using Innertube API (YouTube's internal API)
+    // Method 1: Try Innertube API (YouTube's internal API) - Most reliable in production
     try {
-      console.log("[API] Attempting to fetch transcript using Innertube API");
+      console.log("[API] Attempting Innertube API as primary method");
 
-      const response = await axios.get(
-        `https://www.youtube.com/watch?v=${videoId}&hl=en`,
-        {
-          timeout: 5000,
-          headers: {
-            Accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-          },
-        }
+      const headers = {
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      };
+
+      // First fetch the video page with short timeout
+      const innertubeController = new AbortController();
+      const innertubeTimeoutId = setTimeout(
+        () => innertubeController.abort(),
+        5000
       );
 
-      const html = response.data;
-      const ytInitialDataMatch = html.match(/ytInitialData\s*=\s*({.+?});/);
-      const playerResponse = html.match(
-        /var\s+ytInitialPlayerResponse\s*=\s*({.+?});/
-      );
+      try {
+        const response = await axios.get(
+          `https://www.youtube.com/watch?v=${videoId}&hl=en`,
+          {
+            timeout: 5000,
+            headers,
+            signal: innertubeController.signal,
+          }
+        );
 
-      if (ytInitialDataMatch && playerResponse) {
-        const ytInitialData = JSON.parse(ytInitialDataMatch[1]);
-        const playerData = JSON.parse(playerResponse[1]);
+        clearTimeout(innertubeTimeoutId);
 
-        // Extract captions data
-        if (
-          playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks
-        ) {
-          const captionTracks =
-            playerData.captions.playerCaptionsTracklistRenderer.captionTracks;
-          const captionTrack =
-            captionTracks.find((track: any) => track.languageCode === "en") ||
-            captionTracks[0];
+        const html = response.data;
+        const ytInitialDataMatch = html.match(/ytInitialData\s*=\s*({.+?});/);
+        const playerResponse = html.match(
+          /var\s+ytInitialPlayerResponse\s*=\s*({.+?});/
+        );
 
-          if (captionTrack) {
-            const transcriptResponse = await axios.get(captionTrack.baseUrl, {
-              timeout: 5000,
-            });
-            const xmlData = transcriptResponse.data;
-            const textSegments = xmlData.match(/<text.+?>.+?<\/text>/g) || [];
+        if (ytInitialDataMatch && playerResponse) {
+          const ytInitialData = JSON.parse(ytInitialDataMatch[1]);
+          const playerData = JSON.parse(playerResponse[1]);
 
-            if (textSegments.length > 0) {
-              const rawSegments = textSegments.map((segment: string) => {
-                const startMatch = segment.match(/start="([\d\.]+)"/);
-                const durMatch = segment.match(/dur="([\d\.]+)"/);
-                const textMatch = segment.match(/>(.+?)</);
+          // Extract captions data
+          if (
+            playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks
+          ) {
+            const captionTracks =
+              playerData.captions.playerCaptionsTracklistRenderer.captionTracks;
+            const captionTrack =
+              captionTracks.find((track: any) => track.languageCode === "en") ||
+              captionTracks[0];
 
-                return {
-                  text: textMatch ? decodeHTMLEntities(textMatch[1]) : "",
-                  startTime: startMatch ? parseFloat(startMatch[1]) : 0,
-                  duration: durMatch ? parseFloat(durMatch[1]) : 5,
-                };
-              });
+            if (captionTrack) {
+              // Use a direct fetch with timeout for captions - more reliable than axios in some environments
+              const captionController = new AbortController();
+              const captionTimeoutId = setTimeout(
+                () => captionController.abort(),
+                4000
+              );
 
-              // If we have OpenAI, try to process with GPT
-              if (isOpenAIConfigured() && rawSegments.length > 0) {
-                try {
-                  const combinedText = rawSegments
-                    .map((seg: { text: string }) => seg.text)
-                    .join(" ");
-                  const originalTimingData = rawSegments.map(
-                    (item: {
-                      text: string;
-                      startTime: number;
-                      duration: number;
-                    }) => ({
-                      text: item.text,
-                      startTime: item.startTime,
-                      endTime: item.startTime + item.duration,
-                    })
-                  );
+              try {
+                const captionResponse = await fetch(captionTrack.baseUrl, {
+                  signal: captionController.signal,
+                  headers: {
+                    "Cache-Control": "no-cache",
+                    Pragma: "no-cache",
+                  },
+                });
 
-                  const gptSegments = await processTranscriptWithGPT(
-                    combinedText,
-                    videoTitle,
-                    originalTimingData
-                  );
+                clearTimeout(captionTimeoutId);
 
-                  if (gptSegments.length > 0) {
-                    console.log(
-                      "[API] Using GPT-processed segments from Innertube API"
-                    );
-                    return {
-                      segments: gptSegments,
-                      source: "transcript",
-                    };
-                  }
-                } catch (gptError) {
-                  console.error(
-                    "[API] Error processing with GPT, falling back:",
-                    gptError
+                if (!captionResponse.ok) {
+                  throw new Error(
+                    `Caption fetch failed with status ${captionResponse.status}`
                   );
                 }
-              }
 
-              // Fallback to simple segmentation if GPT processing fails
-              const segments = createSimpleSegments(rawSegments);
-              return {
-                segments,
-                source: "transcript",
-              };
+                const xmlData = await captionResponse.text();
+                const textSegments =
+                  xmlData.match(/<text.+?>.+?<\/text>/g) || [];
+
+                if (textSegments.length > 0) {
+                  console.log(
+                    `[API] Innertube API: Found ${textSegments.length} text segments in XML`
+                  );
+
+                  const rawSegments = textSegments.map((segment: string) => {
+                    const startMatch = segment.match(/start="([\d\.]+)"/);
+                    const durMatch = segment.match(/dur="([\d\.]+)"/);
+                    const textMatch = segment.match(/>(.+?)</);
+
+                    return {
+                      text: textMatch ? decodeHTMLEntities(textMatch[1]) : "",
+                      startTime: startMatch ? parseFloat(startMatch[1]) : 0,
+                      duration: durMatch ? parseFloat(durMatch[1]) : 5,
+                    };
+                  });
+
+                  // If we have OpenAI, try to process with GPT
+                  if (isOpenAIConfigured() && rawSegments.length > 0) {
+                    try {
+                      const combinedText = rawSegments
+                        .map((seg: { text: string }) => seg.text)
+                        .join(" ");
+                      const originalTimingData = rawSegments.map(
+                        (item: {
+                          text: string;
+                          startTime: number;
+                          duration: number;
+                        }) => ({
+                          text: item.text,
+                          startTime: item.startTime,
+                          endTime: item.startTime + item.duration,
+                        })
+                      );
+
+                      const gptSegments = await processTranscriptWithGPT(
+                        combinedText,
+                        videoTitle,
+                        originalTimingData
+                      );
+
+                      if (gptSegments.length > 0) {
+                        console.log(
+                          "[API] Using GPT-processed segments from Innertube API"
+                        );
+                        return {
+                          segments: gptSegments,
+                          source: "transcript",
+                        };
+                      }
+                    } catch (gptError) {
+                      console.error(
+                        "[API] Error processing with GPT, falling back:",
+                        gptError
+                      );
+                    }
+                  }
+
+                  // Fallback to simple segmentation if GPT processing fails
+                  console.log(
+                    "[API] Using simple segmentation from Innertube API"
+                  );
+                  const segments = createSimpleSegments(rawSegments);
+                  return {
+                    segments,
+                    source: "transcript",
+                  };
+                }
+              } catch (captionError) {
+                console.error("[API] Error fetching captions:", captionError);
+              }
             }
           }
         }
+      } catch (error) {
+        clearTimeout(innertubeTimeoutId);
+        console.error("[API] Innertube API error:", error);
       }
     } catch (innertubeError) {
       console.error("[API] Innertube API fallback failed:", innertubeError);
@@ -1028,56 +1079,9 @@ async function fetchYouTubeTranscript(
       console.error("[API] Description fallback failed:", descriptionError);
     }
 
-    // Method 5: Fallback to oEmbed title
-    try {
-      console.log("[API] Attempting title fallback");
-
-      // If all else fails, at least get the title
-      if (videoTitle) {
-        const segments: DialogueSegment[] = [];
-
-        segments.push({
-          id: uuidv4(),
-          speakerName: "Speaker A",
-          text: videoTitle,
-          startTime: 0,
-          endTime: 5,
-          vocabularyItems: [],
-        });
-
-        const genericLines = [
-          `This video is about ${videoTitle}.`,
-          `Let's discuss the key points in this video.`,
-          `I find this topic very interesting.`,
-          `What do you think about this content?`,
-        ];
-
-        genericLines.forEach((line, index) => {
-          segments.push({
-            id: uuidv4(),
-            speakerName: index % 2 === 0 ? "Speaker B" : "Speaker A",
-            text: line,
-            startTime: (index + 1) * 5,
-            endTime: (index + 2) * 5,
-            vocabularyItems: [],
-          });
-        });
-
-        console.log(
-          `[API] Created ${segments.length} fallback segments from title`
-        );
-        return {
-          segments,
-          source: "title",
-        };
-      }
-    } catch (titleError) {
-      console.error("[API] Title fallback failed:", titleError);
-    }
-
-    // If all methods fail, return empty segments
+    // Method 5: Fallback to empty segments rather than generic ones
     console.log(
-      "[API] All transcript methods failed, returning empty segments"
+      "[API] All transcript methods failed - DO NOT use default segments"
     );
     return {
       segments: [],

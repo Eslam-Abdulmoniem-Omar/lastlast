@@ -132,10 +132,6 @@ function AddYouTubeShortPage() {
               })
             );
 
-            // Set video details from metadata
-            setTitle(data.title || "Untitled Video");
-            setEmbedUrl(data.embedUrl || "");
-
             // Check if video is too long (metadata now includes duration in seconds)
             if (data.isTooLong === true) {
               toast.dismiss();
@@ -150,30 +146,36 @@ function AddYouTubeShortPage() {
               return;
             }
 
-            // Use the segments from metadata response
-            if (data.segments && data.segments.length > 0) {
-              console.log(
-                `Client: Setting ${data.segments.length} dialogue segments`
+            // Set video details from metadata
+            setTitle(data.title || "Untitled Video");
+            setEmbedUrl(data.embedUrl || "");
+
+            // Check if we have actual segments from the transcript
+            if (!data.segments || data.segments.length === 0) {
+              // No segments returned from API
+              toast.dismiss();
+              toast.error(
+                "Could not fetch transcript. Please try a different video or add segments manually."
               );
-              setDialogueSegments(data.segments);
-              setTranscriptSource(data.transcriptSource || "unknown");
-              setSuccess(true);
-            } else {
-              // If no segments were returned, leave the array empty
-              console.log(
-                "Client: No segments in response, setting empty array"
+              setError(
+                "Failed to get transcript for this video. Try a different YouTube video or add segments manually."
               );
+
+              // Set empty segments array instead of using defaults
               setDialogueSegments([]);
               setTranscriptSource("unavailable");
 
-              // Still show as success because we got the video metadata
-              setSuccess(true);
-
-              // Show a specific error for no transcript
-              toast.error(
-                "No transcript available for this video. You'll need to create dialogue segments manually."
-              );
+              setIsLoading(false);
+              setIsProcessing(false);
+              return;
             }
+
+            // Use the segments from metadata response
+            setDialogueSegments(data.segments || []);
+            setTranscriptSource(data.transcriptSource || "transcript");
+
+            // Still show as success because we got the video metadata
+            setSuccess(true);
           },
           onError: (error) => {
             console.error("Client: Transcript fetch error:", error);
