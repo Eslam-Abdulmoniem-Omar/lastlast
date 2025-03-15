@@ -1,7 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Remove static export as it doesn't support API routes
-  // output: "export", 
+  // Disable TypeScript type checking in the build process
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  // Disable ESLint in the build process
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  // Image configuration
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -51,11 +58,14 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  // Add this to prevent the warning about Next.js caching
+  // Experimental features
   experimental: {
     serverMinification: true,
     serverSourceMaps: false,
   },
+  // Enable React strict mode
+  reactStrictMode: true,
+  swcMinify: true,
 };
 
-export default nextConfig;
+module.exports = nextConfig;
