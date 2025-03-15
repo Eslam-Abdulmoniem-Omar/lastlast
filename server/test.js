@@ -1,85 +1,89 @@
 const axios = require("axios");
 
-// Test videos - one regular video and one shorts video
+// Test video URLs
 const TEST_VIDEOS = [
   {
-    name: "Regular YouTube video",
-    url: "https://www.youtube.com/watch?v=jNQXAC9IVRw", // First YouTube video ever
+    name: "First YouTube video",
+    url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    lang: "en",
   },
   {
-    name: "YouTube Shorts",
-    url: "https://www.youtube.com/shorts/VQ5lYYpLc9Y", // Popular short
+    name: "YouTube Short",
+    url: "https://www.youtube.com/shorts/TCXXXaY7BPU",
+    lang: "en",
   },
 ];
 
-// Health check to verify proxy configuration
-async function checkHealth() {
-  console.log("Checking server health and proxy configuration...");
+// Test health endpoint
+async function testHealthEndpoint() {
+  console.log("\n1. Testing Health Endpoint...");
 
   try {
-    const response = await axios.get("http://localhost:3001/health");
-    console.log("Server health:", response.data.status);
-    console.log("Proxy configuration:");
-    console.log("  - Username:", response.data.proxyConfig.username);
-    console.log("  - Password:", response.data.proxyConfig.password);
-
-    if (
-      response.data.proxyConfig.username === "✗ missing" ||
-      response.data.proxyConfig.password === "✗ missing"
-    ) {
-      console.error("❌ Webshare credentials are missing or incorrect!");
-      return false;
-    }
-
+    const response = await axios.get(`http://localhost:3001/health`);
+    console.log("✅ Health Check: OK");
+    console.log(
+      "Proxy Configured:",
+      response.data.proxyConfigured ? "Yes" : "No"
+    );
     return true;
   } catch (error) {
-    console.error("❌ Server health check failed:", error.message);
-    console.error('Make sure the server is running with "npm start"');
+    console.error("❌ Health Check Failed");
+    console.error("Error:", error.message);
     return false;
   }
 }
 
-// Test transcript fetching for a specific video
-async function testVideoTranscript(video) {
-  console.log(`\n📹 Testing transcript for ${video.name}: ${video.url}`);
+// Test transcript fetching
+async function testTranscriptFetching(video) {
+  console.log(`\n2. Testing transcript fetching for: ${video.name}`);
+  console.log(`Video URL: ${video.url}`);
+  console.log(`Language: ${video.lang}`);
 
   try {
-    const startTime = Date.now();
-    const response = await axios.get(
-      `http://localhost:3001/api/transcript?url=${encodeURIComponent(
-        video.url
-      )}&debug=true`,
-      { timeout: 30000 } // 30 second timeout
-    );
-    const duration = Date.now() - startTime;
+    const requestUrl = `http://localhost:3001/api/transcript?url=${encodeURIComponent(
+      video.url
+    )}&lang=${video.lang}`;
+    console.log(`Request URL: ${requestUrl}`);
 
-    console.log(`✅ Success (${duration}ms)`);
+    const response = await axios.get(requestUrl);
+
+    console.log("\n✅ Results:");
     console.log("Video ID:", response.data.data.videoId);
     console.log("Language:", response.data.data.language);
-    console.log("Language name:", response.data.data.language_name);
-    console.log("Segments:", response.data.data.segments.length);
+    console.log("Language Name:", response.data.data.languageName);
+    console.log("Number of segments:", response.data.data.segments.length);
+    console.log("Processing Time:", response.data.data.processingTime, "ms");
 
     if (response.data.data.segments.length > 0) {
       console.log("\nFirst few segments:");
-      response.data.data.segments.slice(0, 2).forEach((segment, index) => {
+      response.data.data.segments.slice(0, 3).forEach((segment, index) => {
         console.log(`\nSegment ${index + 1}:`);
-        console.log("  Text:", segment.text);
-        console.log("  Start time:", segment.startTime);
-        console.log("  End time:", segment.endTime);
-        console.log("  Speaker:", segment.speakerName);
+        console.log(`Text: "${segment.text}"`);
+        console.log(`Start Time: ${segment.startTime.toFixed(2)}s`);
+        console.log(`End Time: ${segment.endTime.toFixed(2)}s`);
+        console.log(`Speaker: ${segment.speakerName}`);
       });
     } else {
-      console.warn("⚠️ No transcript segments were returned");
+      console.log("\nNo transcript segments found.");
     }
 
     return true;
   } catch (error) {
-    console.error("❌ Test failed");
+    console.error("\n❌ Test Failed");
 
     if (error.response) {
-      console.error("Status:", error.response.status);
+      console.error(`Status: ${error.response.status}`);
       console.error("Error:", error.response.data.error);
-      console.error("Details:", error.response.data.details);
+      if (error.response.data.details) {
+        console.error("Details:", error.response.data.details);
+      }
+      if (error.response.data.processingTime) {
+        console.error(
+          "Processing Time:",
+          error.response.data.processingTime,
+          "ms"
+        );
+      }
     } else {
       console.error("Error:", error.message);
     }
@@ -90,35 +94,24 @@ async function testVideoTranscript(video) {
 
 // Run all tests
 async function runTests() {
-  console.log("🚀 Starting YouTube Transcript API Tests\n");
+  console.log("======================================");
+  console.log("YouTube Transcript API Test");
+  console.log("======================================");
 
-  // First check health and configuration
-  const healthCheck = await checkHealth();
-  if (!healthCheck) {
-    console.error("\n❌ Health check failed, aborting tests");
+  // First check if the server is running
+  const serverRunning = await testHealthEndpoint();
+
+  if (!serverRunning) {
+    console.error("\n❌ Server is not running. Please start the server first.");
     return;
   }
 
-  console.log("\n✅ Health check passed, running transcript tests...");
+  // Test with the first video
+  await testTranscriptFetching(TEST_VIDEOS[0]);
 
-  // Test each video
-  let passedTests = 0;
-  for (const video of TEST_VIDEOS) {
-    const passed = await testVideoTranscript(video);
-    if (passed) passedTests++;
-  }
-
-  // Report results
-  console.log("\n📊 Test Results:");
-  console.log(`Passed: ${passedTests}/${TEST_VIDEOS.length}`);
-
-  if (passedTests === TEST_VIDEOS.length) {
-    console.log(
-      "\n✅ All tests passed! The server is working correctly with Webshare proxy."
-    );
-  } else {
-    console.log("\n⚠️ Some tests failed. Check the errors above for details.");
-  }
+  console.log("\n======================================");
+  console.log("Tests completed!");
+  console.log("======================================");
 }
 
 // Run the tests
