@@ -6,8 +6,8 @@ import axios from "axios";
 
 // Webshare proxy configuration
 const proxyConfig = {
-  host: "proxy.webshare.io",
-  port: 80,
+  host: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_HOST || "proxy.webshare.io",
+  port: parseInt(process.env.NEXT_PUBLIC_WEBSHARE_PROXY_PORT || "80"),
   auth: {
     username: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_USERNAME || "iacqerjk",
     password: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_PASSWORD || "fijay69twvxo",
