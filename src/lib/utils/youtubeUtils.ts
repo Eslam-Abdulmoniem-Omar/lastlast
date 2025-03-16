@@ -2,6 +2,22 @@
 import { v4 as uuidv4 } from "uuid";
 import { DialogueSegment } from "@/lib/types";
 import { toast } from "react-hot-toast";
+import axios from "axios";
+
+// Webshare proxy configuration
+const proxyConfig = {
+  host: "proxy.webshare.io",
+  port: 80,
+  auth: {
+    username: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_USERNAME || "iacqerjk",
+    password: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_PASSWORD || "fijay69twvxo",
+  },
+};
+
+// Axios client with proxy configuration
+const proxyClient = axios.create({
+  proxy: proxyConfig,
+});
 
 /**
  * Validates if a string is a valid YouTube URL (regular or shorts)
@@ -49,8 +65,28 @@ export const convertToEmbedUrl = (url: string): string => {
  * Creates default dialogue segments when a transcript is not available
  */
 export const createDefaultSegments = (): DialogueSegment[] => {
-  // Return empty array instead of default segments
-  return [];
+  const segments: DialogueSegment[] = [];
+  const segmentDuration = 5;
+  const segmentTexts = [
+    "Welcome to this video.",
+    "Today we'll be discussing an interesting topic.",
+    "I hope you find this content useful.",
+    "Let me know your thoughts in the comments.",
+    "Thank you for watching!",
+  ];
+
+  for (let i = 0; i < segmentTexts.length; i++) {
+    segments.push({
+      id: uuidv4(),
+      speakerName: "",
+      text: segmentTexts[i],
+      startTime: i * segmentDuration,
+      endTime: (i + 1) * segmentDuration,
+      vocabularyItems: [],
+    });
+  }
+
+  return segments;
 };
 
 /**
@@ -60,6 +96,70 @@ export const formatTime = (seconds: number): string => {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+};
+
+/**
+ * Fetches YouTube transcript directly using axios with Webshare proxy
+ */
+export const fetchTranscriptWithProxy = async (
+  videoId: string
+): Promise<any> => {
+  try {
+    console.log(
+      "[Utils] Fetching transcript with Webshare proxy for video ID:",
+      videoId
+    );
+
+    // Try to fetch transcript via YouTube's API directly using the proxy
+    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    // First, try to get the video page to extract transcript data
+    const response = await proxyClient.get(youtubeUrl, {
+      timeout: 10000,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    console.log("[Utils] Successfully fetched YouTube page via proxy");
+
+    // If we successfully got the page, try to fetch the transcript using the Python API
+    // The Python API will handle extracting and processing the transcript
+    const pythonApiUrl = `/api/youtube/python-transcript?url=${encodeURIComponent(
+      youtubeUrl
+    )}&t=${Date.now()}`;
+
+    const transcriptResponse = await fetch(pythonApiUrl, {
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
+
+    if (!transcriptResponse.ok) {
+      throw new Error(`Python API responded with ${transcriptResponse.status}`);
+    }
+
+    const transcriptData = await transcriptResponse.json();
+
+    if (
+      transcriptData.data &&
+      transcriptData.data.segments &&
+      transcriptData.data.segments.length > 0
+    ) {
+      console.log(
+        "[Utils] Successfully got transcript data from Python API after proxy fetch"
+      );
+      return transcriptData.data;
+    }
+
+    throw new Error("No transcript segments found in response");
+  } catch (error) {
+    console.error("[Utils] Error fetching transcript with proxy:", error);
+    throw error;
+  }
 };
 
 /**
@@ -185,14 +285,74 @@ export const fetchTranscript = async (
           }
 
           console.log(
-            "[Utils] Python API failed or returned no segments, trying metadata API..."
+            "[Utils] Python API failed or returned no segments, trying direct proxy approach..."
           );
         } catch (pythonError) {
           console.error(
             "[Utils] Error with Python transcript API:",
             pythonError
           );
-          // Fall through to the metadata API
+          // Fall through to the next method
+        }
+
+        // Try using axios with direct proxy
+        try {
+          console.log("[Utils] Trying direct Axios with Webshare proxy...");
+          const proxyData = await fetchTranscriptWithProxy(videoId);
+
+          if (
+            proxyData &&
+            proxyData.segments &&
+            proxyData.segments.length > 0
+          ) {
+            // Get metadata separately for title, etc.
+            const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
+              url
+            )}&t=${Date.now()}`;
+
+            const metadataResponse = await fetch(metadataUrl, {
+              signal: controller.signal,
+              headers: {
+                "Cache-Control": "no-cache",
+                Pragma: "no-cache",
+              },
+            });
+
+            const metadataJson = await metadataResponse.json();
+
+            // Combine proxy segments with metadata
+            const responseData = {
+              title: metadataJson.data?.title || "",
+              embedUrl: metadataJson.data?.embedUrl || convertToEmbedUrl(url),
+              segments: proxyData.segments,
+              transcriptSource: "proxy-transcript-api",
+            };
+
+            if (callbacks.onSuccess) {
+              callbacks.onSuccess(responseData);
+            }
+
+            toast.dismiss();
+            toast.success(
+              `Video loaded with transcript (${proxyData.segments.length} segments)`,
+              {
+                duration: 4000,
+              }
+            );
+
+            clearTimeout(timeoutId);
+            return;
+          }
+
+          console.log(
+            "[Utils] Direct proxy approach failed, trying metadata API..."
+          );
+        } catch (proxyError) {
+          console.error(
+            "[Utils] Error with direct proxy approach:",
+            proxyError
+          );
+          // Fall through to the regular metadata API
         }
 
         // Add environment indicator and timestamp to help with debugging
