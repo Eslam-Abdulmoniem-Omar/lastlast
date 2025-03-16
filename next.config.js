@@ -14,10 +14,6 @@ const nextConfig = {
     ],
     unoptimized: true,
   },
-  // Disable some features in development to reduce confusion
-  experimental: {
-    serverActions: true,
-  },
   // Add headers for security
   async headers() {
     return [
