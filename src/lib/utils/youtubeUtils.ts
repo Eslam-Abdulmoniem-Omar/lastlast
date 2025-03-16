@@ -116,6 +116,85 @@ export const fetchTranscript = async (
           console.log("[Utils] Aborting fetch due to timeout");
         }, TIMEOUT_MS);
 
+        // First try the Python-based API which can use the proxy
+        // This is more likely to succeed with the proxy
+        try {
+          console.log("[Utils] Trying Python-based transcript API first...");
+          const pythonTranscriptUrl = `/api/youtube/python-transcript?url=${encodeURIComponent(
+            url
+          )}&t=${Date.now()}`;
+
+          const pythonResponse = await fetch(pythonTranscriptUrl, {
+            signal: controller.signal,
+            headers: {
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
+          });
+
+          if (pythonResponse.ok) {
+            const pythonData = await pythonResponse.json();
+
+            if (
+              pythonData.data &&
+              pythonData.data.segments &&
+              pythonData.data.segments.length > 0
+            ) {
+              console.log(
+                "[Utils] Successfully fetched transcript from Python API"
+              );
+
+              // Get metadata separately for title, etc.
+              const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
+                url
+              )}&t=${Date.now()}`;
+
+              const metadataResponse = await fetch(metadataUrl, {
+                signal: controller.signal,
+                headers: {
+                  "Cache-Control": "no-cache",
+                  Pragma: "no-cache",
+                },
+              });
+
+              const metadataJson = await metadataResponse.json();
+
+              // Combine Python segments with metadata
+              const responseData = {
+                title: metadataJson.data?.title || "",
+                embedUrl: metadataJson.data?.embedUrl || convertToEmbedUrl(url),
+                segments: pythonData.data.segments,
+                transcriptSource: "python-transcript-api",
+              };
+
+              if (callbacks.onSuccess) {
+                callbacks.onSuccess(responseData);
+              }
+
+              toast.dismiss();
+              toast.success(
+                `Video loaded with transcript (${pythonData.data.segments.length} segments)`,
+                {
+                  duration: 4000,
+                }
+              );
+
+              clearTimeout(timeoutId);
+              return;
+            }
+          }
+
+          console.log(
+            "[Utils] Python API failed or returned no segments, trying metadata API..."
+          );
+        } catch (pythonError) {
+          console.error(
+            "[Utils] Error with Python transcript API:",
+            pythonError
+          );
+          // Fall through to the metadata API
+        }
+
         // Add environment indicator and timestamp to help with debugging
         const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
           url
