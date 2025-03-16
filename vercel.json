@@ -1,21 +1,20 @@
 {
   "version": 2,
-  "builds": [{ "src": "api/*.py", "use": "@vercel/python" }],
-  "routes": [
-    {
-      "src": "/api/youtube/(?<video_id>[^/]+)",
-      "dest": "/api/index.py?video_id=$video_id",
-      "comment": "This route automatically passes the video_id parameter to the YouTube API"
-    },
-    {
-      "src": "/api/tiktok/(?<video_id>[^/]+)",
-      "dest": "/api/index.py/tiktok?video_id=$video_id",
-      "comment": "This route automatically passes the video_id parameter to the TikTok API"
-    },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/api/index.py" }
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install && npm run install-python-deps",
+  "builds": [
+    { "src": "package.json", "use": "@vercel/next" },
+    { "src": "api/*.py", "use": "@vercel/python" }
   ],
-  "env": {
-    "PYTHONPATH": "."
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/" }
+  ],
+  "functions": {
+    "api/*.py": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
   }
 }
