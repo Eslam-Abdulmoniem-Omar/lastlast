@@ -13,16 +13,29 @@ from youtube_transcript_grabber import get_transcript
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests to the API"""
+        # Parse query parameters
+        parsed_path = urlparse(self.path)
+        query_params = parse_qs(parsed_path.query)
+        
+        # Debug information
+        debug_info = {
+            'path': self.path,
+            'parsed_path': parsed_path.path,
+            'query_string': parsed_path.query,
+            'query_params': {k: v for k, v in query_params.items()},
+            'headers': {k: v for k, v in self.headers.items()}
+        }
+        
+        # Log the debug info
+        print("Debug info:", json.dumps(debug_info))
+        
+        # Set response headers
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        
-        # Parse query parameters
-        parsed_path = urlparse(self.path)
-        query_params = parse_qs(parsed_path.query)
         
         # If this is the root path with no parameters, return API info
         if parsed_path.path == '/' and not query_params:
@@ -31,17 +44,29 @@ class handler(BaseHTTPRequestHandler):
                 'version': '1.0',
                 'usage': 'GET /?video_id=VIDEO_ID&language=LANGUAGE_CODE',
                 'example': '/?video_id=Hc79sDi3f0U&language=en',
-                'note': 'This API requires a video_id parameter'
+                'note': 'This API requires a video_id parameter',
+                'debug_info': debug_info
             }
             self.wfile.write(json.dumps(response).encode())
             return
+        
+        # Try to extract video_id from the path if it's not in query params
+        if 'video_id' not in query_params and parsed_path.path != '/':
+            path_parts = parsed_path.path.strip('/').split('/')
+            if len(path_parts) > 0 and path_parts[-1]:
+                # Assume the last part of the path might be the video_id
+                potential_video_id = path_parts[-1]
+                if len(potential_video_id) > 5:  # Basic validation for a video ID
+                    query_params['video_id'] = [potential_video_id]
+                    print(f"Extracted video_id from path: {potential_video_id}")
         
         # Check if video_id is provided
         if 'video_id' not in query_params:
             response = {
                 'error': 'Missing required parameter: video_id',
                 'usage': 'GET /?video_id=VIDEO_ID&language=LANGUAGE_CODE',
-                'example': '/?video_id=Hc79sDi3f0U&language=en'
+                'example': '/?video_id=Hc79sDi3f0U&language=en',
+                'debug_info': debug_info
             }
             self.wfile.write(json.dumps(response).encode())
             return
@@ -65,7 +90,8 @@ class handler(BaseHTTPRequestHandler):
             response = {
                 'error': str(e),
                 'video_id': video_id,
-                'language': language
+                'language': language,
+                'debug_info': debug_info
             }
             self.wfile.write(json.dumps(response).encode())
     
@@ -74,9 +100,18 @@ class handler(BaseHTTPRequestHandler):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
         
+        # Debug information
+        debug_info = {
+            'path': self.path,
+            'method': 'POST',
+            'content_length': content_length,
+            'headers': {k: v for k, v in self.headers.items()}
+        }
+        
         try:
             # Parse the JSON request body
             data = json.loads(post_data)
+            debug_info['data'] = data
             
             # Check if video_id is provided
             if 'video_id' not in data:
@@ -88,7 +123,8 @@ class handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 response = {
                     'error': 'Missing required parameter: video_id',
-                    'usage': 'POST with JSON body: {"video_id": "VIDEO_ID", "language": "LANGUAGE_CODE"}'
+                    'usage': 'POST with JSON body: {"video_id": "VIDEO_ID", "language": "LANGUAGE_CODE"}',
+                    'debug_info': debug_info
                 }
                 self.wfile.write(json.dumps(response).encode())
                 return
@@ -121,7 +157,8 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             response = {
-                'error': 'Invalid JSON in request body'
+                'error': 'Invalid JSON in request body',
+                'debug_info': debug_info
             }
             self.wfile.write(json.dumps(response).encode())
             
@@ -133,7 +170,8 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             response = {
-                'error': str(e)
+                'error': str(e),
+                'debug_info': debug_info
             }
             self.wfile.write(json.dumps(response).encode())
     
