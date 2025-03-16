@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postinstall": "node src/scripts/install_deps.js",
     "start": "next start",
     "start:prod": "NODE_ENV=production next start",
     "lint": "next lint",
@@ -18,6 +19,7 @@
     "@google-cloud/storage": "^7.15.2",
     "@google/generative-ai": "^0.23.0",
     "ai": "^3.3.20",
+    "autoprefixer": "^10.4.17",
     "axios": "^1.8.3",
     "date-fns": "^3.6.0",
     "fast-xml-parser": "^5.0.8",
@@ -26,13 +28,15 @@
     "lucide-react": "^0.436.0",
     "next": "14.2.7",
     "openai": "^4.87.3",
-    "react": "^18",
+    "postcss": "^8.4.35",
+    "react": "^18.2.0",
     "react-confetti": "^6.4.0",
-    "react-dom": "^18",
+    "react-dom": "^18.2.0",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
     "react-markdown": "^9.0.1",
     "replicate": "^0.32.0",
+    "tailwindcss": "^3.4.1",
     "uuid": "^11.1.0",
     "youtube-transcript": "^1.2.1",
     "zod": "^3.24.2"
@@ -44,8 +48,9 @@
     "@types/uuid": "^10.0.0",
     "eslint": "^8",
     "eslint-config-next": "14.2.7",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
     "typescript": "5.8.2"
+  },
+  "engines": {
+    "node": ">=18.17.0"
   }
 }

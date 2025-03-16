@@ -12,6 +12,7 @@ const nextConfig = {
       "img.youtube.com",
       "lh3.googleusercontent.com",
     ],
+    unoptimized: true,
   },
   // Disable some features in development to reduce confusion
   experimental: {
@@ -43,6 +44,8 @@ const nextConfig = {
   env: {
     RAPIDAPI_KEY: process.env.RAPIDAPI_KEY,
   },
+  // Increase the memory limit for the build process
+  transpilePackages: ["@ai-sdk/anthropic", "@ai-sdk/openai"],
 };
 
 module.exports = nextConfig;
