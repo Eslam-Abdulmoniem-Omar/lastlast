@@ -15,17 +15,33 @@ class handler(BaseHTTPRequestHandler):
         """Handle GET requests to the API"""
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
         
         # Parse query parameters
         parsed_path = urlparse(self.path)
         query_params = parse_qs(parsed_path.query)
         
+        # If this is the root path with no parameters, return API info
+        if parsed_path.path == '/' and not query_params:
+            response = {
+                'api': 'YouTube Transcript API',
+                'version': '1.0',
+                'usage': 'GET /?video_id=VIDEO_ID&language=LANGUAGE_CODE',
+                'example': '/?video_id=Hc79sDi3f0U&language=en',
+                'note': 'This API requires a video_id parameter'
+            }
+            self.wfile.write(json.dumps(response).encode())
+            return
+        
         # Check if video_id is provided
         if 'video_id' not in query_params:
             response = {
                 'error': 'Missing required parameter: video_id',
-                'usage': 'GET /?video_id=VIDEO_ID&language=LANGUAGE_CODE'
+                'usage': 'GET /?video_id=VIDEO_ID&language=LANGUAGE_CODE',
+                'example': '/?video_id=Hc79sDi3f0U&language=en'
             }
             self.wfile.write(json.dumps(response).encode())
             return
@@ -66,6 +82,9 @@ class handler(BaseHTTPRequestHandler):
             if 'video_id' not in data:
                 self.send_response(400)
                 self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
                 self.end_headers()
                 response = {
                     'error': 'Missing required parameter: video_id',
@@ -83,6 +102,9 @@ class handler(BaseHTTPRequestHandler):
             # Return the transcript
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             response = {
                 'video_id': video_id,
@@ -94,6 +116,9 @@ class handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self.send_response(400)
             self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             response = {
                 'error': 'Invalid JSON in request body'
@@ -103,8 +128,19 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             response = {
                 'error': str(e)
             }
-            self.wfile.write(json.dumps(response).encode()) 
+            self.wfile.write(json.dumps(response).encode())
+    
+    def do_OPTIONS(self):
+        """Handle OPTIONS requests for CORS preflight"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers() 
