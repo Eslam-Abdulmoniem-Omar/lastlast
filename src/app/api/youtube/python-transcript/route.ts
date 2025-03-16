@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 export const revalidate = 0;
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
@@ -36,7 +36,7 @@ function extractVideoId(url: string): string | null {
 async function getPythonTranscript(videoId: string): Promise<any> {
   try {
     console.log(`Running Python script for video ID: ${videoId}`);
-    
+
     // Log environment variables for debugging (don't log in production)
     console.log("Webshare proxy env vars present:", {
       username: !!process.env.WEBSHARE_PROXY_USERNAME,
@@ -48,12 +48,14 @@ async function getPythonTranscript(videoId: string): Promise<any> {
       process.cwd(),
       "src/scripts/youtube_transcript.py"
     );
-    
+
     // Set environment variables directly for the Python process
     const env = {
       ...process.env,
-      WEBSHARE_PROXY_USERNAME: process.env.WEBSHARE_PROXY_USERNAME || "iacqerjk",
-      WEBSHARE_PROXY_PASSWORD: process.env.WEBSHARE_PROXY_PASSWORD || "fijay69twvxo",
+      WEBSHARE_PROXY_USERNAME:
+        process.env.WEBSHARE_PROXY_USERNAME || "iacqerjk",
+      WEBSHARE_PROXY_PASSWORD:
+        process.env.WEBSHARE_PROXY_PASSWORD || "fijay69twvxo",
     };
 
     // Run the Python script with the video ID as an argument
@@ -66,7 +68,7 @@ async function getPythonTranscript(videoId: string): Promise<any> {
       console.error(`Python script error: ${stderr}`);
       throw new Error(`Python script error: ${stderr}`);
     }
-    
+
     console.log(`Python script output: ${stdout.substring(0, 200)}...`);
 
     // Parse the JSON output from the Python script
@@ -82,7 +84,7 @@ async function getPythonTranscript(videoId: string): Promise<any> {
     if (result.error) {
       throw new Error(result.error);
     }
-    
+
     if (result.debug) {
       console.log("Debug info from Python script:", result.debug);
     }
@@ -142,12 +144,15 @@ export async function GET(request: Request) {
     console.error("Error in Python transcript API:", error);
 
     // Return error response with 200 status to prevent Next.js from displaying error page
-    return NextResponse.json({
-      error: error.message || "Unknown error",
-      data: {
-        segments: [],
-        source: "error",
-      }
-    }, { status: 200 });
+    return NextResponse.json(
+      {
+        error: error.message || "Unknown error",
+        data: {
+          segments: [],
+          source: "error",
+        },
+      },
+      { status: 200 }
+    );
   }
 }
