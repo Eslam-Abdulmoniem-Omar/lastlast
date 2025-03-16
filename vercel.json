@@ -4,7 +4,8 @@
   "routes": [
     {
       "src": "/api/youtube/(?<video_id>[^/]+)",
-      "dest": "/api/index.py?video_id=$video_id"
+      "dest": "/api/index.py?video_id=$video_id",
+      "comment": "This route automatically passes the video_id parameter to the API"
     },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "/api/index.py" }
