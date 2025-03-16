@@ -20,6 +20,7 @@ import { updateListeningProgress } from "@/lib/firebase/podcastUtils";
 import { motion } from "framer-motion";
 import SpeechRecorder from "./SpeechRecorder";
 import GuidedSpeakingPractice from "./GuidedSpeakingPractice";
+import VocabularyTest from "./VocabularyTest";
 
 interface TimestampedYouTubePlayerProps {
   podcast: Podcast;
@@ -27,7 +28,7 @@ interface TimestampedYouTubePlayerProps {
 }
 
 // Define a type for the practice modes
-type PracticeMode = "listening" | "vocabulary" | "speaking";
+type PracticeMode = "listening" | "vocabulary" | "speaking" | "test";
 
 // Fallback dialogue lines if podcast doesn't have dialogueSegments
 const fallbackDialogueLines: DialogueLine[] = [
@@ -143,6 +144,7 @@ export default function TimestampedYouTubePlayer({
     isLoading?: boolean;
     explanation?: string;
   } | null>(null);
+  const [struggledWords, setStruggledWords] = useState<string[]>([]);
 
   const playerRef = useRef<YT.Player | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -395,12 +397,7 @@ export default function TimestampedYouTubePlayer({
   };
 
   const togglePracticeMode = (mode: PracticeMode) => {
-    // Redirect to vocabulary mode if speaking mode is requested
-    if (mode === "speaking") {
-      setPracticeMode("vocabulary");
-      return;
-    }
-
+    // Remove the redirection for speaking mode
     setPracticeMode(mode);
 
     // If switching to speaking mode, pause the video
@@ -670,6 +667,68 @@ export default function TimestampedYouTubePlayer({
     );
   };
 
+  // Add a new render function for the test mode
+  const renderTestMode = () => {
+    return (
+      <div className="mt-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Vocabulary Test</h3>
+          <button
+            onClick={() => togglePracticeMode("listening")}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Return to Listening
+          </button>
+        </div>
+
+        <VocabularyTest
+          struggledWords={
+            struggledWords.length > 0
+              ? struggledWords
+              : getCommonWordsFromDialogue()
+          }
+          videoContext={podcast.title}
+          onComplete={() => {
+            // Optionally do something when test is completed
+            console.log("Test completed");
+          }}
+        />
+      </div>
+    );
+  };
+
+  // Add a helper function to extract common words from dialogue if no struggled words yet
+  const getCommonWordsFromDialogue = (): string[] => {
+    // Extract some common words from the dialogue lines
+    const allText = dialogueLines.map((line) => line.text).join(" ");
+    const words = allText.toLowerCase().match(/\b\w+\b/g) || [];
+
+    // Filter out common words and get unique ones
+    const commonWords = words
+      .filter(
+        (word) =>
+          word.length > 3 &&
+          !["this", "that", "with", "from", "have", "your"].includes(word)
+      )
+      .filter((word, index, self) => self.indexOf(word) === index)
+      .slice(0, 5); // Take first 5 unique words
+
+    return commonWords;
+  };
+
+  // Add a function to collect struggled words
+  const addStruggledWords = (words: string[]) => {
+    const newWords = words.filter(
+      (word) => !struggledWords.includes(word.toLowerCase())
+    );
+    if (newWords.length > 0) {
+      setStruggledWords((prev) => [
+        ...prev,
+        ...newWords.map((w) => w.toLowerCase()),
+      ]);
+    }
+  };
+
   return (
     <div className="w-full bg-[#1b2b48]/80 backdrop-blur-sm rounded-lg shadow-xl border border-[#2e3b56]/50 overflow-hidden">
       <style jsx global>{`
@@ -775,14 +834,33 @@ export default function TimestampedYouTubePlayer({
               />
               <span className="font-medium">Vocabulary</span>
             </button>
-            {/* Speaking mode disabled temporarily */}
-            <div
-              className="flex-1 p-3 flex items-center justify-center space-x-2 cursor-not-allowed opacity-50"
-              title="Guided practice mode temporarily disabled"
+            {/* Re-enable Speaking mode */}
+            <button
+              onClick={() => togglePracticeMode("speaking")}
+              className={`flex-1 p-3 flex items-center justify-center space-x-2 transition-all duration-200 ${
+                practiceMode === "speaking"
+                  ? "bg-[#0c1527] text-[#4d7efa] font-bold border-b-2 border-[#4d7efa]"
+                  : "hover:bg-[#0c1527] hover:text-[#4d7efa]"
+              }`}
             >
-              <Mic size={20} />
-              <span className="font-medium">Speaking (Disabled)</span>
-            </div>
+              <Mic
+                size={20}
+                className={practiceMode === "speaking" ? "text-[#4d7efa]" : ""}
+              />
+              <span className="font-medium">Speaking</span>
+            </button>
+            {/* Add a Test button to the mode selection */}
+            <button
+              onClick={() => togglePracticeMode("test")}
+              className={`flex items-center justify-center py-2 px-3 text-sm rounded-md ${
+                practiceMode === "test"
+                  ? "bg-purple-100 text-purple-700 border border-purple-300"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <BookOpen size={16} className="mr-1" />
+              <span>Test</span>
+            </button>
           </div>
         </div>
       </div>
@@ -904,16 +982,12 @@ export default function TimestampedYouTubePlayer({
           </div>
         )}
 
-        {/* Guided Speaking Practice for Speaking mode - temporarily disabled */}
-        {/* {practiceMode === "speaking" && (
+        {/* Guided Speaking Practice for Speaking mode */}
+        {practiceMode === "speaking" && (
           <div className="w-full p-4">
             <GuidedSpeakingPractice
               dialogueLines={dialogueLines}
               onSeekToTime={seekToTime}
-              onComplete={() => {
-                togglePracticeMode("listening");
-                setRecordingFeedback("Guided practice completed! Great job!");
-              }}
               onPauseVideo={pauseVideo}
               onPlayVideo={() => {
                 if (playerRef.current && playerReady) {
@@ -921,10 +995,16 @@ export default function TimestampedYouTubePlayer({
                   setIsPlaying(true);
                 }
               }}
+              onComplete={() => {
+                togglePracticeMode("listening");
+                setRecordingFeedback("Guided practice completed! Great job!");
+              }}
               currentTime={currentTime}
+              simpleFeedback={false}
+              onMissingWords={addStruggledWords}
             />
           </div>
-        )} */}
+        )}
       </div>
 
       {/* Sentence translation popup */}
@@ -1218,6 +1298,9 @@ export default function TimestampedYouTubePlayer({
           </div>
         </div>
       )}
+
+      {/* Test mode */}
+      {practiceMode === "test" && renderTestMode()}
     </div>
   );
 }

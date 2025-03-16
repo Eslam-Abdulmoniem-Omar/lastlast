@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "metal-cascade-453903-i3",
+  "private_key_id": "236f7a64c33a93ae33d923d9957f88e02b405daa",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDIdiD69QiUM64P\nqvdVMlx6IfEygWm1df2aq4R4Gdd2R//30bqDnIZ77YZ4XP6VhN47zrPo0dtYWK5D\naomG5fQyBBB16nAzTn57L62L63xAseZgrPKNZsmptjqEUeSzndk/LRQcreqhwcld\nWJQsYTmPYfVKPvAY9gv2v8BwQbj13UP12+3H7iPZdFP2RlnhoTIUuNXrK6WN4uTc\nzlio0a68hS1jbdWla9SC3Jm+P78SAiKF+pDbF05ZEXNZLrCSBsXhY8gzxfCKLEQl\nJTkLmIT6F41XJgg9LduL6YWp6JoqdPJ3FbhtQBDjldgJqMe7Kreno1WzISIN+LMz\nMJ9TXGkfAgMBAAECggEAP+mh5EGBpbbAdVBeITS4VVxDCYZHTMq8u7aZuq0KjDSy\ngLHGlLWwDw0RBYkoxkUhkdH6fG2EUKudi/MIvBDPBa9UDDRd543MN7xgya6f5ASU\nXhhmEP1HqKtoBs4Ra88U99aIhghROZeOewuF2ox5DKT/ztc4N80izV4fnermbMS5\nrKFJt7nP2ylxJjBlPigRHX+6y5vM0+K+8WEk24sZoYV39XxPGOCG8DHDGSWo4lnL\n7snRmdAyqCGkfm2ntelaHs0d2hzJWq43sOvckwXYiQUhtju8MeXoyAIlci1LMhy9\nrko+IjeskND4+fAgnbDoa978syDF5l7Vax4bl1TtmQKBgQDndunBE+6TZqE5BSVN\nHuPYuKbvkOf/h8hYA1Mi0lCGfp7JhF58/yAYtp951Qi9qqj+FOgkNw1hEp0YE5x8\nhuh/PgDa6vfKgug1Il3vmI6A35wBEd76wdIOQzTkomfbIG5HpL0VrfQ80+b04dB5\nd8kia6yGTOjMs0909eT45tkNtQKBgQDdtehhl/v96wj1xlCbFRRrNzsZSom5HatF\nEKl7cZ/PFAv8HKiMDjteFnOBqy/ytrgHT+jZdxbx11C7quQhAnF6IWFgCyiyBfKq\ncmjVDAu/umiZCE60ao9o/gg6suhqdeD7xLxJQUPUpLHE3tXo60joFUrpTE1FcxtI\n7G137FRAAwKBgG99IITGpADNy1RavSfTfC30azwzUPwNHBwApfe809qkfLlWD+kn\nPf+JX3FggpBQ9otD6Lkg50ndnFtvfs2gcbZwWBsaWHZr7YtCXXq9wc4jZtJBGGUy\nHIqQJpcF/v5WNag+mnEp093Et5c2eaM4ZmI0+OnLe8q1h80vb7XQA7aNAoGBAJT5\nGgAZo5TmTMr4SkkqTOIN5oQD9a6RJPfvTjJIEt2N1s+8YfRZy8JYy5whbsJjzBv9\nsbQNtTkjOHghR9B2V9F8hHWIifu0y22EGrSst2hI1OefEWNhBqPBrb3jYQ/HzTje\n5LVESVOkpl5mbM1o60AmroM8Zd94jKjfVF70SVgJAoGAHEem+Qo4TxuNXL/fmApc\nsqQ0dFm783KMUhfLUO4BuH50vY/pfU26gbU4rv5oPasd46sGT5nygd7W9S0IqJsK\naERW8OH8TgCQNxRc3yvh8ZhAFORh8IymjyR7opEuixx16uBb/Muz52xVpVlzbmk2\n2wkFbsLmAWlyp98q0CKapuM=\n-----END PRIVATE KEY-----\n",
+  "client_email": "speech@metal-cascade-453903-i3.iam.gserviceaccount.com",
+  "client_id": "112531106796457365030",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/speech%40metal-cascade-453903-i3.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

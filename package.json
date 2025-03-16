@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:prod": "NODE_ENV=production next start",
     "lint": "next lint",
     "install-python-deps": "node src/scripts/install_deps.js"
   },
@@ -13,6 +14,8 @@
     "@ai-sdk/anthropic": "^0.0.48",
     "@ai-sdk/openai": "^0.0.54",
     "@deepgram/sdk": "^3.6.0",
+    "@google-cloud/speech": "^5.0.0",
+    "@google-cloud/storage": "^7.15.2",
     "@google/generative-ai": "^0.23.0",
     "ai": "^3.3.20",
     "axios": "^1.8.3",

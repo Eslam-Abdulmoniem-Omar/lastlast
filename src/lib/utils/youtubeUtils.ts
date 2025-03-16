@@ -216,10 +216,134 @@ export const fetchTranscript = async (
           console.log("[Utils] Aborting fetch due to timeout");
         }, TIMEOUT_MS);
 
-        // First try the Python-based API which can use the proxy
-        // This is more likely to succeed with the proxy
+        // First try the RapidAPI-based endpoint which is more reliable
         try {
-          console.log("[Utils] Trying Python-based transcript API first...");
+          console.log("[Utils] Trying RapidAPI transcript service first...");
+          const rapidApiTranscriptUrl = `/api/youtube/rapidapi-transcript?url=${encodeURIComponent(
+            url
+          )}&t=${Date.now()}`;
+
+          const rapidApiResponse = await fetch(rapidApiTranscriptUrl, {
+            signal: controller.signal,
+            headers: {
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
+          });
+
+          let rapidApiErrorDetail = "";
+
+          if (rapidApiResponse.ok) {
+            const rapidApiData = await rapidApiResponse.json();
+
+            // Check if the response contains an error
+            if (rapidApiData.error) {
+              rapidApiErrorDetail = rapidApiData.error;
+              console.warn(
+                `[Utils] RapidAPI returned error: ${rapidApiData.error}`
+              );
+              // Don't throw, just fall through to next method
+            } else if (
+              rapidApiData.data &&
+              rapidApiData.data.segments &&
+              rapidApiData.data.segments.length > 0
+            ) {
+              console.log(
+                `[Utils] Successfully fetched transcript from RapidAPI service (${rapidApiData.data.segments.length} segments)`
+              );
+
+              // If the response includes a title and embed URL, use those
+              if (rapidApiData.data.title) {
+                // The full data already contains everything needed, return it
+                clearTimeout(timeoutId);
+
+                if (callbacks.onSuccess) {
+                  callbacks.onSuccess({
+                    segments: rapidApiData.data.segments,
+                    transcriptSource: "rapidapi",
+                    title: rapidApiData.data.title,
+                    embedUrl: rapidApiData.data.embedUrl,
+                    youtubeUrl: url,
+                  });
+                }
+
+                if (callbacks.onComplete) {
+                  callbacks.onComplete();
+                }
+
+                return;
+              } else {
+                // Otherwise, get metadata separately for title, etc.
+                const metadataUrl = `/api/youtube/metadata?url=${encodeURIComponent(
+                  url
+                )}&t=${Date.now()}`;
+
+                try {
+                  const metadataResponse = await fetch(metadataUrl, {
+                    signal: controller.signal,
+                  });
+
+                  if (metadataResponse.ok) {
+                    const metadataData = await metadataResponse.json();
+
+                    clearTimeout(timeoutId);
+
+                    if (callbacks.onSuccess) {
+                      callbacks.onSuccess({
+                        segments: rapidApiData.data.segments,
+                        transcriptSource: "rapidapi",
+                        title: metadataData.title || "YouTube Video",
+                        description: metadataData.description || "",
+                        thumbnail: metadataData.thumbnail || "",
+                        embedUrl: convertToEmbedUrl(url),
+                        youtubeUrl: url,
+                      });
+                    }
+
+                    if (callbacks.onComplete) {
+                      callbacks.onComplete();
+                    }
+
+                    return;
+                  }
+                } catch (error) {
+                  console.error("[Utils] Error fetching metadata:", error);
+                  // Continue with fallback options
+                }
+              }
+            } else {
+              console.warn(
+                "[Utils] RapidAPI returned no segments, falling back to other methods"
+              );
+            }
+          } else {
+            // Try to get more details about the error
+            try {
+              const errorData = await rapidApiResponse.json();
+              rapidApiErrorDetail =
+                errorData.error || `Status: ${rapidApiResponse.status}`;
+            } catch (e) {
+              rapidApiErrorDetail = `Status: ${rapidApiResponse.status}`;
+            }
+            console.warn(
+              `[Utils] RapidAPI request failed: ${rapidApiErrorDetail}`
+            );
+          }
+
+          // Log the failure but don't throw an error - just continue to the next method
+          console.log(
+            `[Utils] RapidAPI transcript method failed: ${
+              rapidApiErrorDetail || "Unknown error"
+            }. Trying next method...`
+          );
+        } catch (error) {
+          console.error("[Utils] Error with RapidAPI transcript:", error);
+          // Continue to next method if this fails
+        }
+
+        // Fall back to Python-based API if RapidAPI fails
+        try {
+          console.log("[Utils] Falling back to Python-based transcript API...");
           const pythonTranscriptUrl = `/api/youtube/python-transcript?url=${encodeURIComponent(
             url
           )}&t=${Date.now()}`;
@@ -541,32 +665,44 @@ export const saveTemporaryPracticeData = (data: {
  */
 export const getTranscriptSourceInfo = (transcriptSource: string) => {
   const getColorClass = () => {
-    switch (transcriptSource) {
-      case "transcript":
-        return "text-green-700 bg-green-50";
-      case "transcript-processed":
-        return "text-green-700 bg-green-50";
-      case "description":
-        return "text-blue-700 bg-blue-50";
-      case "title":
-        return "text-yellow-700 bg-yellow-50";
-      default:
-        return "text-gray-700 bg-gray-50";
+    if (transcriptSource === "youtube-api" || transcriptSource === "yt-api") {
+      return "text-green-600 border-green-300 bg-green-50";
+    } else if (
+      transcriptSource === "python-transcript-api" ||
+      transcriptSource === "python"
+    ) {
+      return "text-blue-600 border-blue-300 bg-blue-50";
+    } else if (
+      transcriptSource === "rapidapi" ||
+      transcriptSource === "rapidapi-transcript"
+    ) {
+      return "text-purple-600 border-purple-300 bg-purple-50";
+    } else if (transcriptSource === "manual") {
+      return "text-amber-600 border-amber-300 bg-amber-50";
+    } else {
+      return "text-gray-600 border-gray-300 bg-gray-50";
     }
   };
 
   const getMessage = () => {
-    switch (transcriptSource) {
-      case "transcript":
-        return "These segments contain the actual transcript from the video with accurate timestamps.";
-      case "transcript-processed":
-        return "These segments contain the actual transcript from the video, processed by AI for better sentence breaks and timestamps.";
-      case "description":
-        return "These segments are created from the video description since a transcript wasn't available.";
-      case "title":
-        return "These segments are based on the video title since a transcript wasn't available.";
-      default:
-        return "No transcript was available for this video, so generated segments were created.";
+    if (transcriptSource === "youtube-api" || transcriptSource === "yt-api") {
+      return "Professional transcript from YouTube API";
+    } else if (
+      transcriptSource === "python-transcript-api" ||
+      transcriptSource === "python"
+    ) {
+      return "Auto-generated transcript from YouTube";
+    } else if (
+      transcriptSource === "rapidapi" ||
+      transcriptSource === "rapidapi-transcript"
+    ) {
+      return "Transcript fetched via RapidAPI";
+    } else if (transcriptSource === "manual") {
+      return "Manually entered transcript";
+    } else if (transcriptSource === "default") {
+      return "Default transcript template";
+    } else {
+      return "Transcript source unknown";
     }
   };
 

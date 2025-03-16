@@ -20,7 +20,6 @@ interface GuidedSpeakingPracticeProps {
   onPlayVideo?: () => void;
   currentTime?: number;
   simpleFeedback?: boolean;
-  onMissingWords?: (words: string[]) => void;
 }
 
 interface CorrectionHighlight {
@@ -41,7 +40,6 @@ export default function GuidedSpeakingPractice({
   onPlayVideo,
   currentTime = 0,
   simpleFeedback = false,
-  onMissingWords,
 }: GuidedSpeakingPracticeProps) {
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -79,7 +77,7 @@ export default function GuidedSpeakingPractice({
     }
   };
 
-  // Process audio blob with Google Cloud Speech API
+  // Process audio blob using Google Cloud Speech-to-Text API
   const processAudioBlob = async (audioBlob: Blob) => {
     try {
       console.log("Processing audio blob:", audioBlob.size, "bytes");
@@ -89,9 +87,10 @@ export default function GuidedSpeakingPractice({
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
 
-      // Try Google Cloud Speech API first
+      // Try the Google Cloud Speech-to-Text API first
       try {
         console.log("Sending audio to Google Cloud Speech API");
+        // Send the audio to our Google Cloud Speech-to-Text API endpoint
         const response = await fetch("/api/google-speech/transcribe", {
           method: "POST",
           body: formData,
@@ -132,28 +131,21 @@ export default function GuidedSpeakingPractice({
           if (words.length < 2) {
             console.log("Too few words detected:", trimmedTranscript);
             setResult("error");
-            setRecordingError(
-              "Not enough words detected. Please try speaking the full sentence."
-            );
+            setRecordingError("Not enough words detected. Please try speaking the full sentence.");
             setWaitingForSpeech(true);
             return;
           }
 
           // COMPARE: Verify the transcript contains at least one word from the expected sentence
           const expectedWords = currentLine.text.toLowerCase().split(/\s+/);
-          const hasMatchingWord = words.some((word: string) =>
-            expectedWords.some(
-              (expected: string) =>
-                expected.includes(word) || word.includes(expected)
-            )
+          const hasMatchingWord = words.some((word: string) => 
+            expectedWords.some((expected: string) => expected.includes(word) || word.includes(expected))
           );
-
+          
           if (!hasMatchingWord && words.length < 4) {
             console.log("No matching words found in the transcript");
             setResult("error");
-            setRecordingError(
-              "Your speech didn't match the sentence. Please try again."
-            );
+            setRecordingError("Your speech didn't match the sentence. Please try again.");
             setWaitingForSpeech(true);
             return;
           }
@@ -240,28 +232,21 @@ export default function GuidedSpeakingPractice({
         if (words.length < 2) {
           console.log("Too few words detected:", trimmedTranscript);
           setResult("error");
-          setRecordingError(
-            "Not enough words detected. Please try speaking the full sentence."
-          );
+          setRecordingError("Not enough words detected. Please try speaking the full sentence.");
           setWaitingForSpeech(true);
           return;
         }
 
         // COMPARE: Verify the transcript contains at least one word from the expected sentence
         const expectedWords = currentLine.text.toLowerCase().split(/\s+/);
-        const hasMatchingWord = words.some((word: string) =>
-          expectedWords.some(
-            (expected: string) =>
-              expected.includes(word) || word.includes(expected)
-          )
+        const hasMatchingWord = words.some((word: string) => 
+          expectedWords.some((expected: string) => expected.includes(word) || word.includes(expected))
         );
-
+        
         if (!hasMatchingWord && words.length < 4) {
           console.log("No matching words found in the transcript");
           setResult("error");
-          setRecordingError(
-            "Your speech didn't match the sentence. Please try again."
-          );
+          setRecordingError("Your speech didn't match the sentence. Please try again.");
           setWaitingForSpeech(true);
           return;
         }
@@ -309,33 +294,7 @@ export default function GuidedSpeakingPractice({
   ) => {
     if (!currentLine) return;
 
-    // Check if the transcript is empty or just whitespace
-    if (!userTranscript || !userTranscript.trim()) {
-      console.log("Empty transcript in evaluateTranscript");
-      setRecordingError("No speech was detected. Please try again.");
-      setWaitingForSpeech(true);
-      return;
-    }
-
-    // Check if there are too few words
-    const wordsInTranscript = userTranscript.trim().split(/\s+/).length;
-    const minRequiredWords = Math.max(
-      1,
-      Math.floor(currentLine.text.length * 0.2)
-    );
-
-    if (wordsInTranscript < minRequiredWords) {
-      console.log(
-        `Too few words detected (${wordsInTranscript}/${currentLine.text.length})`
-      );
-      setRecordingError(
-        "Too few words detected. Please try speaking the full sentence."
-      );
-      setWaitingForSpeech(true);
-      return;
-    }
-
-    // Check if transcript has substantial content (at least 20% of expected words)
+    // Normalize the expected text (keep contractions, remove other punctuation)
     const normalizedExpected = currentLine.text
       .toLowerCase()
       .replace(/[.,?!;:]/g, "") // Remove punctuation except apostrophes
@@ -353,6 +312,33 @@ export default function GuidedSpeakingPractice({
     let bestMatchTranscript = userTranscript;
     let bestCorrections: CorrectionHighlight[] = [];
     let bestMissingWords: string[] = [];
+
+    // At the beginning of the evaluateTranscript function, add this check:
+    // Check if the transcript is empty or just whitespace
+    if (!userTranscript || !userTranscript.trim()) {
+      console.log("Empty transcript in evaluateTranscript");
+      setRecordingError("No speech was detected. Please try again.");
+      setWaitingForSpeech(true);
+      return;
+    }
+
+    // Also check if there are too few words
+    const wordsInTranscript = userTranscript.trim().split(/\s+/).length;
+    const minRequiredWords = Math.max(
+      1,
+      Math.floor(expectedWords.length * 0.2)
+    );
+
+    if (wordsInTranscript < minRequiredWords) {
+      console.log(
+        `Too few words detected (${wordsInTranscript}/${expectedWords.length})`
+      );
+      setRecordingError(
+        "Too few words detected. Please try speaking the full sentence."
+      );
+      setWaitingForSpeech(true);
+      return;
+    }
 
     for (const transcript of allTranscripts) {
       const normalizedTranscript = transcript
@@ -483,11 +469,6 @@ export default function GuidedSpeakingPractice({
       tooManyMissingWords,
       showPositiveFeedback: bestMatchScore >= threshold || !tooManyMissingWords,
     });
-
-    if (bestMissingWords.length > 0 && onMissingWords) {
-      // Call the callback with missing words
-      onMissingWords(bestMissingWords);
-    }
   };
 
   // Start practice function

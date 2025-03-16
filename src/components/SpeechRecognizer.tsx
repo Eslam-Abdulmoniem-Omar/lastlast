@@ -321,46 +321,86 @@ export default function SpeechRecognizer({
 
       // If Web Speech API failed to provide a transcription, use our server API
       console.log(
-        "Web Speech API transcription not available, using server API"
+        "Web Speech API transcription not available, using Google Cloud Speech API"
       );
 
-      // Prepare form data with both audio and any transcript we might have from Web Speech API
+      // Prepare form data with the audio
       const formData = new FormData();
-      formData.append("audio", audioBlob);
+      formData.append("audio", audioBlob, "recording.webm");
 
-      // Always send any transcript we have from Web Speech API, even if partial
+      // Always send any transcript we might have from Web Speech API, even if partial
       const webSpeechText = transcription || interimTranscript || "";
       if (webSpeechText) {
         console.log("Including Web Speech API transcript:", webSpeechText);
         formData.append("webSpeechTranscript", webSpeechText);
       }
 
-      const response = await fetch("/api/speech-to-text", {
-        method: "POST",
-        body: formData,
-      });
+      // Try Google Cloud Speech API first
+      try {
+        console.log("Sending audio to Google Cloud Speech API...");
+        const response = await fetch("/api/google-speech/transcribe", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`Google API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log("Google Cloud Speech API result:", result);
+
+        if (result.transcript) {
+          const apiTranscription = result.transcript;
+          setTranscription(apiTranscription);
+
+          if (onTranscriptionComplete) {
+            onTranscriptionComplete(apiTranscription);
+          }
+          setIsProcessing(false);
+          return;
+        } else {
+          console.warn(
+            "Google Cloud Speech API returned empty transcript, falling back to backup API"
+          );
+        }
+      } catch (googleApiError) {
+        console.error("Error with Google Cloud Speech API:", googleApiError);
+        console.log("Falling back to backup speech-to-text API...");
       }
 
-      const result = await response.json();
-      console.log("API transcription result:", result);
+      // Fall back to original API if Google Cloud fails
+      try {
+        const response = await fetch("/api/speech-to-text", {
+          method: "POST",
+          body: formData,
+        });
 
-      // Set the transcription from the API and make sure it's visible
-      const apiTranscript = result.transcript || "";
-      setTranscription(apiTranscript);
-      console.log("Setting transcription to:", apiTranscript);
+        if (!response.ok) {
+          throw new Error(`Backup API error: ${response.status}`);
+        }
 
-      // Call the callback if provided
-      if (onTranscriptionComplete) {
-        onTranscriptionComplete(apiTranscript);
+        const result = await response.json();
+        console.log("Backup API transcription result:", result);
+
+        // Set the transcription from the API and make sure it's visible
+        const apiTranscript = result.transcript || "";
+        setTranscription(apiTranscript);
+        console.log("Setting transcription to:", apiTranscript);
+
+        // Call the callback if provided
+        if (onTranscriptionComplete) {
+          onTranscriptionComplete(apiTranscript);
+        }
+      } catch (error) {
+        console.error("Error processing recording:", error);
+        setErrorWithCallback("Failed to process speech. Please try again.");
+      } finally {
+        setIsProcessing(false);
       }
     } catch (error) {
       console.error("Error processing recording:", error);
       setErrorWithCallback("Failed to process speech. Please try again.");
-    } finally {
-      setIsProcessing(false);
     }
   };
 

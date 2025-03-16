@@ -146,3 +146,103 @@ MIT
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+# SayFluent - Language Learning Application
+
+SayFluent is a language learning application focused on helping users improve their speaking skills through interactive practice with YouTube videos and other multimedia content.
+
+## Deployment Instructions
+
+### Prerequisites
+
+- Node.js 18 or later
+- Python 3.8 or later
+- npm or yarn
+- Docker and Docker Compose (for containerized deployment)
+
+### Environment Setup
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Eslam-Abdulmoniem-Omar/sayFlunetlastversion.git
+   cd sayFlunetlastversion
+   ```
+
+2. Create environment variables file:
+   ```bash
+   cp .env.example .env
+   ```
+   
+3. Update the `.env` file with your actual API keys and configuration.
+
+### Method 1: Direct Deployment
+
+1. Install dependencies:
+   ```bash
+   npm install --legacy-peer-deps
+   ```
+
+2. Install Python dependencies:
+   ```bash
+   npm run install-python-deps
+   ```
+
+3. Build the application:
+   ```bash
+   npm run build
+   ```
+
+4. Start the production server:
+   ```bash
+   npm run start:prod
+   ```
+
+### Method 2: Using the Deployment Script
+
+1. Make the script executable:
+   ```bash
+   chmod +x deploy.sh
+   ```
+
+2. Run the deployment script:
+   ```bash
+   ./deploy.sh
+   ```
+
+3. Start the server:
+   ```bash
+   npm start
+   ```
+
+### Method 3: Using Docker (Recommended for Production)
+
+1. Build and start the Docker container:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. The application will be available at http://localhost:3000
+
+## Environment Variables
+
+The following environment variables need to be set in your .env file:
+
+- `RAPIDAPI_KEY`: Your RapidAPI key for YouTube transcript service
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `WEBSHARE_PROXY_USERNAME`: Webshare proxy username (optional)
+- `WEBSHARE_PROXY_PASSWORD`: Webshare proxy password (optional)
+- Firebase configuration variables (See .env.example)
+
+## Features
+
+- YouTube video integration for language learning
+- Speech recognition and pronunciation feedback
+- Vocabulary testing and practice
+- RapidAPI-based transcript fetching
+
+## Troubleshooting
+
+If you encounter issues with transcript fetching:
+1. Check that your RapidAPI key is properly set in the .env file
+2. Try testing the RapidAPI endpoint directly using the test page at /test-rapid-api
+3. Check server logs for any error messages
