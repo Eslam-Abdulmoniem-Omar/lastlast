@@ -4,8 +4,20 @@ import { DialogueSegment } from "@/lib/types";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 
-// Webshare proxy configuration is removed as it can't be used client-side
-// We will rely on server-side proxy implementation instead
+// Webshare proxy configuration
+const proxyConfig = {
+  host: "proxy.webshare.io",
+  port: 80,
+  auth: {
+    username: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_USERNAME || "iacqerjk",
+    password: process.env.NEXT_PUBLIC_WEBSHARE_PROXY_PASSWORD || "fijay69twvxo",
+  },
+};
+
+// Axios client with proxy configuration
+const proxyClient = axios.create({
+  proxy: proxyConfig,
+});
 
 /**
  * Validates if a string is a valid YouTube URL (regular or shorts)
@@ -87,22 +99,34 @@ export const formatTime = (seconds: number): string => {
 };
 
 /**
- * Fetches YouTube transcript using server-side API that can access the proxy
+ * Fetches YouTube transcript directly using axios with Webshare proxy
  */
 export const fetchTranscriptWithProxy = async (
   videoId: string
 ): Promise<any> => {
   try {
     console.log(
-      "[Utils] Fetching transcript with server-side proxy for video ID:",
+      "[Utils] Fetching transcript with Webshare proxy for video ID:",
       videoId
     );
 
-    // Instead of trying to use a proxy directly in the browser,
-    // we'll call our server-side API that can use the proxy
+    // Try to fetch transcript via YouTube's API directly using the proxy
     const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    // Call the Python API which handles proxy configuration server-side
+    // First, try to get the video page to extract transcript data
+    const response = await proxyClient.get(youtubeUrl, {
+      timeout: 10000,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    console.log("[Utils] Successfully fetched YouTube page via proxy");
+
+    // If we successfully got the page, try to fetch the transcript using the Python API
+    // The Python API will handle extracting and processing the transcript
     const pythonApiUrl = `/api/youtube/python-transcript?url=${encodeURIComponent(
       youtubeUrl
     )}&t=${Date.now()}`;
@@ -112,8 +136,6 @@ export const fetchTranscriptWithProxy = async (
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
       },
-      // Add a longer timeout for potentially slow proxy responses
-      signal: AbortSignal.timeout(15000),
     });
 
     if (!transcriptResponse.ok) {
@@ -127,19 +149,21 @@ export const fetchTranscriptWithProxy = async (
       transcriptData.data.segments &&
       transcriptData.data.segments.length > 0
     ) {
-      console.log("[Utils] Successfully got transcript data from Python API");
+      console.log(
+        "[Utils] Successfully got transcript data from Python API after proxy fetch"
+      );
       return transcriptData.data;
     }
 
     throw new Error("No transcript segments found in response");
   } catch (error) {
-    console.error("[Utils] Error with server-side proxy approach:", error);
+    console.error("[Utils] Error fetching transcript with proxy:", error);
     throw error;
   }
 };
 
 /**
- * Fetches transcript data with improved error handling and retry logic
+ * Fetches transcript data from the YouTube API with improved error handling and retry logic
  */
 export const fetchTranscript = async (
   url: string,
@@ -192,9 +216,10 @@ export const fetchTranscript = async (
           console.log("[Utils] Aborting fetch due to timeout");
         }, TIMEOUT_MS);
 
-        // First try the Python-based API which uses server-side proxy
+        // First try the Python-based API which can use the proxy
+        // This is more likely to succeed with the proxy
         try {
-          console.log("[Utils] Trying Python-based transcript API...");
+          console.log("[Utils] Trying Python-based transcript API first...");
           const pythonTranscriptUrl = `/api/youtube/python-transcript?url=${encodeURIComponent(
             url
           )}&t=${Date.now()}`;
