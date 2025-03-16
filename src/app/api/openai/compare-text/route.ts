@@ -94,12 +94,8 @@ Only respond with valid JSON.`,
       temperature: 0.3, // Lower temperature for more consistent results
     });
 
-    // Parse the response with proper null checking
-    const content = response.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("Invalid or empty response from OpenAI");
-    }
-    const result = JSON.parse(content);
+    // Parse the response
+    const result = JSON.parse(response.choices[0].message.content);
 
     // Remove log that exposes result data
     // console.log("Comparison result:", result);

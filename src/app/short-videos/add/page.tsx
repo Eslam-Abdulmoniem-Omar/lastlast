@@ -112,123 +112,50 @@ function AddYouTubeShortPage() {
       setError(null);
       setIsProcessing(true);
 
-      console.log("Client: Fetching transcript for:", url);
+      const response = await fetchYoutubeTranscript(url, {
+        onStart: () => {
+          // We handle loading state in component
+        },
+        onSuccess: (data) => {
+          // Set video details from metadata
+          setTitle(data.title);
+          setEmbedUrl(data.embedUrl);
 
-      toast.loading("Fetching video transcript...");
-
-      try {
-        const response = await fetchYoutubeTranscript(url, {
-          onStart: () => {
-            // We handle loading state in component
-            console.log("Client: Transcript fetch started");
-          },
-          onSuccess: (data) => {
-            console.log(
-              "Client: Transcript fetch succeeded with data:",
-              JSON.stringify({
-                title: data.title,
-                segmentsCount: data.segments?.length || 0,
-                transcriptSource: data.transcriptSource,
-              })
-            );
-
-            // Set video details from metadata
-            setTitle(data.title || "Untitled Video");
-            setEmbedUrl(data.embedUrl || "");
-
-            // Check if video is too long (metadata now includes duration in seconds)
-            if (data.isTooLong === true) {
-              toast.dismiss();
-              toast.error(
-                "This video is too long. Please use videos under 2 minutes in length."
-              );
-              setError(
-                "Video length exceeds the maximum of 2 minutes. Please select a shorter video."
-              );
-              setIsLoading(false);
-              setIsProcessing(false);
-              return;
-            }
-
-            // Use the segments from metadata response
-            if (data.segments && data.segments.length > 0) {
-              console.log(
-                `Client: Setting ${data.segments.length} dialogue segments`
-              );
-              setDialogueSegments(data.segments);
-              setTranscriptSource(data.transcriptSource || "unknown");
-              setSuccess(true);
-            } else {
-              // If no segments were returned, leave the array empty
-              console.log(
-                "Client: No segments in response, setting empty array"
-              );
-              setDialogueSegments([]);
-              setTranscriptSource("unavailable");
-
-              // Still show as success because we got the video metadata
-              setSuccess(true);
-
-              // Show a specific error for no transcript
-              toast.error(
-                "No transcript available for this video. You'll need to create dialogue segments manually."
-              );
-            }
-          },
-          onError: (error) => {
-            console.error("Client: Transcript fetch error:", error);
-
-            // Check if error is related to video length
-            if (error.includes && error.includes("too long")) {
-              toast.error(
-                "This video is too long. Please use videos under 2 minutes in length."
-              );
-              setError(
-                "Video length exceeds the maximum of 2 minutes. Please select a shorter video."
-              );
-            } else {
-              toast.error("Failed to process video. Try another YouTube URL.");
-              setError(
-                `Failed to process video: ${
-                  error.message || error.toString() || "Unknown error"
-                }`
-              );
-            }
-          },
-          onComplete: () => {
-            console.log("Client: Transcript fetch complete");
-            setIsLoading(false);
-            setIsProcessing(false);
-          },
-        });
-
-        console.log("Client: fetchYoutubeTranscript call completed");
-      } catch (err: any) {
-        console.error("Client: Error in fetchYoutubeTranscript:", err);
-
-        // Check if error response contains information about video length
-        if (
-          err.response?.data?.isTooLong ||
-          (err.message && err.message.includes("too long"))
-        ) {
-          toast.error(
-            "This video is too long. Please use videos under 2 minutes in length."
-          );
+          // Use the segments from metadata response
+          if (data.segments && data.segments.length > 0) {
+            setDialogueSegments(data.segments);
+            setTranscriptSource(data.transcriptSource);
+            setSuccess(true);
+          } else {
+            // Create default segments if none were returned
+            console.warn("No segments returned from metadata API");
+            const defaultSegments = createDefaultSegments();
+            setDialogueSegments(defaultSegments);
+            setTranscriptSource("default");
+          }
+        },
+        onError: (error) => {
           setError(
-            "Video length exceeds the maximum of 2 minutes. Please select a shorter video."
+            `Failed to fetch YouTube data: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
           );
-        } else {
-          toast.error("Failed to process video. Try another YouTube URL.");
-          setError(`Error: ${err.message || "Failed to process video"}`);
-        }
-      }
+
+          // Create default segments on error
+          const defaultSegments = createDefaultSegments();
+          setDialogueSegments(defaultSegments);
+          setTranscriptSource("default");
+        },
+        onComplete: () => {
+          setIsLoading(false);
+          setIsProcessing(false);
+        },
+      });
     } catch (error) {
-      console.error("Client: Critical error in fetchTranscript:", error);
+      console.error("Error in fetchTranscript:", error);
+      // This is a fallback in case something goes wrong with the utility function
       setIsLoading(false);
       setIsProcessing(false);
-      setError(
-        "An unexpected error occurred. Please reload the page and try again."
-      );
     }
   };
 
