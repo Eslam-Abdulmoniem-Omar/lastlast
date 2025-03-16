@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import OpenAI from "openai";
 
+// Set to Node.js runtime for file system access
+export const runtime = "nodejs";
+
 // Initialize the OpenAI client with the API key from .env.local
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",

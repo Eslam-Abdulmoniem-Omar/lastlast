@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 export const revalidate = 0;
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
