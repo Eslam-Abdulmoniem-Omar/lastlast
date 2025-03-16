@@ -17,6 +17,7 @@ export interface Podcast {
   audioUrl: string;
   transcriptUrl: string;
   youtubeUrl?: string;
+  tiktokUrl?: string;
   level: "beginner" | "intermediate" | "advanced";
   duration: number; // in seconds
   topics: string[];
@@ -27,6 +28,7 @@ export interface Podcast {
   referenceAnswers: ReferenceAnswer[];
   dialogueSegments?: DialogueSegment[];
   isShort?: boolean;
+  videoSource?: "youtube" | "tiktok";
 }
 
 export interface PodcastQuestion {
@@ -134,4 +136,18 @@ export interface DialogueLine {
   text: string;
   startTime: number; // in seconds
   endTime?: number; // in seconds (optional)
+}
+
+// Add TikTok-related types
+export interface TikTokTranscript {
+  transcript: string | TikTokTranscriptEntry[];
+  title?: string;
+  language?: string;
+}
+
+export interface TikTokTranscriptEntry {
+  text: string;
+  start?: number;
+  end?: number;
+  confidence?: number;
 }

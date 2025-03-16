@@ -20,6 +20,7 @@ import { v4 as uuidv4 } from "uuid";
 import { toast } from "react-hot-toast";
 import { DeepgramContextProvider } from "@/lib/contexts/DeepgramContext";
 import TimestampedYouTubePlayer from "@/components/TimestampedYouTubePlayer";
+import TikTokPlayer from "@/components/TikTokPlayer";
 // Import utility functions
 import {
   validateYoutubeUrl,
@@ -27,7 +28,8 @@ import {
   convertToEmbedUrl,
   createDefaultSegments,
   formatTime,
-  fetchTranscript as fetchYoutubeTranscript,
+  fetchVideoTranscript,
+  validateTikTokUrl,
   saveTemporaryPracticeData,
   getTranscriptSourceInfo,
 } from "@/lib/utils/youtubeUtils";
@@ -75,7 +77,7 @@ function AddYouTubeShortPage() {
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [practiceStarted, setPracticeStarted] = useState(false);
 
-  const handleYoutubeUrlChange = async (
+  const handleVideoUrlChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const url = e.target.value;
@@ -95,6 +97,19 @@ function AddYouTubeShortPage() {
         setError("Invalid YouTube URL format");
         setEmbedUrl("");
       }
+    } else if (validateTikTokUrl(url)) {
+      try {
+        // For TikTok, the embed URL is the same as the original URL
+        setEmbedUrl(url);
+        setError(null);
+
+        // Fetch transcript for TikTok
+        fetchTranscript(url);
+      } catch (error) {
+        console.error("Error processing URL:", error);
+        setError("Invalid TikTok URL format");
+        setEmbedUrl("");
+      }
     } else {
       setEmbedUrl("");
     }
@@ -102,8 +117,8 @@ function AddYouTubeShortPage() {
 
   // Function to fetch transcript for a YouTube URL
   const fetchTranscript = async (url: string) => {
-    if (!validateYoutubeUrl(url)) {
-      setError("Please enter a valid YouTube URL first");
+    if (!validateYoutubeUrl(url) && !validateTikTokUrl(url)) {
+      setError("Please enter a valid YouTube or TikTok URL first");
       return;
     }
 
@@ -112,7 +127,7 @@ function AddYouTubeShortPage() {
       setError(null);
       setIsProcessing(true);
 
-      const response = await fetchYoutubeTranscript(url, {
+      await fetchVideoTranscript(url, {
         onStart: () => {
           // We handle loading state in component
         },
@@ -136,7 +151,7 @@ function AddYouTubeShortPage() {
         },
         onError: (error) => {
           setError(
-            `Failed to fetch YouTube data: ${
+            `Failed to fetch video data: ${
               error instanceof Error ? error.message : "Unknown error"
             }`
           );
@@ -234,87 +249,58 @@ function AddYouTubeShortPage() {
 
     // Validate required fields
     if (!title) {
-      setError("Please enter a title");
+      setError("Please enter a title for the video");
       return;
     }
 
-    if (!embedUrl) {
-      setError("Please enter a valid YouTube URL");
-      return;
-    }
-
-    if (!dialogueSegments || dialogueSegments.length === 0) {
+    if (dialogueSegments.length === 0) {
       setError("Please add at least one dialogue segment");
       return;
     }
 
-    // No longer requiring users to add additional segments
-    // The segments from the transcript are sufficient
+    if (!validateYoutubeUrl(youtubeUrl) && !validateTikTokUrl(youtubeUrl)) {
+      setError("Please enter a valid YouTube or TikTok URL");
+      return;
+    }
+
+    // Set flags
+    setIsSubmitting(true);
+    setError(null);
 
     try {
-      setIsLoading(true);
-      setIsSubmitting(true);
-      setError(null);
+      const isYouTube = validateYoutubeUrl(youtubeUrl);
+      const isTikTok = validateTikTokUrl(youtubeUrl);
 
-      // Create the podcast with YouTube data
-      const newVideoData: Omit<Podcast, "id"> = {
+      // Create a new podcast with YouTube/TikTok data
+      const podcastData: Partial<Podcast> = {
         title,
-        description: title, // Just use title as description
-        audioUrl: "", // Placeholder
-        transcriptUrl: "", // Placeholder
-        youtubeUrl: embedUrl,
-        level: "intermediate" as "beginner" | "intermediate" | "advanced", // Properly typed default level
-        duration:
-          dialogueSegments.length > 0
-            ? Math.max(...dialogueSegments.map((segment) => segment.endTime))
-            : 30,
+        description,
+        level,
         topics,
-        hostName: user?.displayName || "Anonymous User",
-        publishedDate: new Date().toISOString(),
-        questions: [],
-        referenceAnswers: [],
+        youtubeUrl: isYouTube ? youtubeUrl : undefined,
+        tiktokUrl: isTikTok ? youtubeUrl : undefined,
+        videoSource: isYouTube ? "youtube" : "tiktok",
         dialogueSegments,
         isShort: true,
       };
 
-      const result = await createPodcastWithYouTube(newVideoData);
+      // Call Firebase utility to create the podcast
+      await createPodcastWithYouTube(podcastData, user?.uid);
 
-      if (result && result.id) {
-        toast.success("YouTube short added successfully!");
+      // Show success message
+      toast.success("Short video saved successfully!");
 
-        // Create a temporary practice session in localStorage
-        const practiceData = {
-          id: result.id,
-          title,
-          embedUrl,
-          youtubeUrl,
-          dialogueSegments,
-          isTemporary: false,
-          createdAt: new Date().toISOString(),
-        };
-
-        // Save to localStorage for practice
-        localStorage.setItem(
-          "current-practice-data",
-          JSON.stringify(practiceData)
-        );
-
-        // Log for debugging
-        console.log("Saved practice data to localStorage:", practiceData);
-        console.log("Navigating to practice page...");
-
-        // Navigate directly to the practice page instead of the short videos page
-        router.push("/practice/short-video");
-      } else {
-        setError("Failed to add YouTube short");
-      }
-    } catch (error: any) {
-      console.error("Error adding YouTube short:", error);
+      // Wait a moment to show the success message before navigating
+      setTimeout(() => {
+        router.push("/short-videos");
+      }, 2000);
+    } catch (error) {
+      console.error("Error saving podcast:", error);
       setError(
-        error.message || "An error occurred while adding the YouTube short"
+        `Failed to save podcast: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
-    } finally {
-      setIsLoading(false);
       setIsSubmitting(false);
     }
   };
@@ -364,8 +350,8 @@ function AddYouTubeShortPage() {
             id="youtubeUrl"
             type="text"
             value={youtubeUrl}
-            onChange={handleYoutubeUrlChange}
-            placeholder="https://www.youtube.com/watch?v=..."
+            onChange={handleVideoUrlChange}
+            placeholder="Enter YouTube or TikTok URL..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             required
           />
@@ -522,13 +508,38 @@ function AddYouTubeShortPage() {
                             Preview
                           </label>
                           <div className="aspect-video rounded-md overflow-hidden bg-gray-100 shadow-md">
-                            <iframe
-                              src={embedUrl}
-                              className="w-full h-full"
-                              title="YouTube video player"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            ></iframe>
+                            {validateYoutubeUrl(youtubeUrl) ? (
+                              <iframe
+                                src={embedUrl}
+                                className="w-full h-full"
+                                title="YouTube video player"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              ></iframe>
+                            ) : validateTikTokUrl(youtubeUrl) ? (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <div
+                                  className="w-full h-full"
+                                  dangerouslySetInnerHTML={{
+                                    __html: `
+                                    <blockquote 
+                                      class="tiktok-embed w-full h-full" 
+                                      cite="${youtubeUrl}"
+                                      data-video-id="${
+                                        youtubeUrl
+                                          .split("/")
+                                          .pop()
+                                          ?.split("?")[0]
+                                      }"
+                                      style="max-width: 100%; min-width: 100%;">
+                                      <section></section>
+                                    </blockquote>
+                                    <script async src="https://www.tiktok.com/embed.js"></script>
+                                    `,
+                                  }}
+                                />
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       )}
@@ -714,7 +725,7 @@ function AddYouTubeShortPage() {
               </div>
             </>
           ) : (
-            // Practice mode view using TimestampedYouTubePlayer component
+            // Practice mode view using appropriate player component based on URL type
             <div>
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -730,33 +741,85 @@ function AddYouTubeShortPage() {
               </div>
 
               <DeepgramContextProvider>
-                <TimestampedYouTubePlayer
-                  podcast={{
-                    id: `temp-${uuidv4()}`,
-                    title: title || "YouTube Video",
-                    description: description || "",
-                    audioUrl: "",
-                    transcriptUrl: "",
-                    youtubeUrl: youtubeUrl,
-                    level: level,
-                    duration:
-                      dialogueSegments.length > 0
-                        ? Math.max(
-                            ...dialogueSegments.map(
-                              (segment) => segment.endTime
+                {validateYoutubeUrl(youtubeUrl) ? (
+                  <TimestampedYouTubePlayer
+                    podcast={{
+                      id: `temp-${uuidv4()}`,
+                      title: title || "YouTube Video",
+                      description: description || "",
+                      audioUrl: "",
+                      transcriptUrl: "",
+                      youtubeUrl: youtubeUrl,
+                      level: level,
+                      duration:
+                        dialogueSegments.length > 0
+                          ? Math.max(
+                              ...dialogueSegments.map(
+                                (segment) => segment.endTime
+                              )
                             )
-                          )
-                        : 0,
-                    topics: topics,
-                    hostName: "",
-                    publishedDate: new Date().toISOString(),
-                    questions: [],
-                    referenceAnswers: [],
-                    dialogueSegments: dialogueSegments,
-                    isShort: true,
-                  }}
-                  onComplete={handlePracticeComplete}
-                />
+                          : 0,
+                      topics: topics,
+                      hostName: "",
+                      publishedDate: new Date().toISOString(),
+                      questions: [],
+                      referenceAnswers: [],
+                      dialogueSegments: dialogueSegments,
+                      isShort: true,
+                    }}
+                    onComplete={handlePracticeComplete}
+                  />
+                ) : validateTikTokUrl(youtubeUrl) ? (
+                  <div className="bg-white rounded-xl shadow-sm p-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      <div>
+                        <TikTokPlayer
+                          tiktokUrl={youtubeUrl}
+                          dialogueLines={dialogueSegments.map((segment) => ({
+                            id: segment.id,
+                            text: segment.text,
+                            startTime: segment.startTime,
+                            endTime: segment.endTime,
+                          }))}
+                        />
+                      </div>
+                      <div>
+                        <div className="p-4 bg-blue-50 rounded-lg mb-4">
+                          <h3 className="font-medium text-lg mb-2">
+                            Practice Instructions
+                          </h3>
+                          <p>
+                            Watch the TikTok video and practice speaking along
+                            with it. Focus on pronunciation and timing.
+                          </p>
+                        </div>
+                        <div className="border rounded-lg overflow-hidden">
+                          <h3 className="px-4 py-2 bg-gray-50 font-medium border-b">
+                            Transcript
+                          </h3>
+                          <div className="divide-y max-h-[500px] overflow-y-auto custom-scrollbar">
+                            {dialogueSegments.map((segment, index) => (
+                              <div key={segment.id} className="p-3">
+                                <p className="text-sm text-gray-500 mb-1">
+                                  {formatTime(segment.startTime)} -{" "}
+                                  {formatTime(segment.endTime)}
+                                </p>
+                                <p>{segment.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          onClick={handlePracticeComplete}
+                          className="mt-4 w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
+                        >
+                          <Headphones className="h-5 w-5 mr-2" />
+                          Complete Practice
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </DeepgramContextProvider>
             </div>
           )}

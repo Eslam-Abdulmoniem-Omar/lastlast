@@ -723,3 +723,138 @@ export const extractYouTubeVideoId = extractVideoId;
 export const generateTranscriptUrl = (videoId: string): string => {
   return `/api/youtube/metadata?url=https://www.youtube.com/watch?v=${videoId}&t=${Date.now()}`;
 };
+
+// Add validation function for TikTok URLs
+export const validateTikTokUrl = (url: string): boolean => {
+  const tiktokRegex = /^(https?:\/\/)?(www\.)?(tiktok\.com)\/.+$/;
+  return tiktokRegex.test(url);
+};
+
+// Function to fetch TikTok transcript
+export const fetchTikTokTranscript = async (
+  url: string,
+  callbacks: {
+    onStart?: () => void;
+    onSuccess?: (data: any) => void;
+    onError?: (error: Error) => void;
+    onComplete?: () => void;
+  } = {}
+) => {
+  if (!validateTikTokUrl(url)) {
+    if (callbacks.onError) {
+      callbacks.onError(new Error("Please enter a valid TikTok URL"));
+    }
+    return;
+  }
+
+  try {
+    if (callbacks.onStart) {
+      callbacks.onStart();
+    }
+
+    console.log("[Utils] Fetching TikTok transcript for:", url);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.log("[Utils] Aborting TikTok fetch due to timeout");
+    }, 15000);
+
+    try {
+      console.log("[Utils] Calling TikTok transcript API...");
+      const tiktokApiUrl = `/api/tiktok/transcript?url=${encodeURIComponent(
+        url
+      )}&t=${Date.now()}`;
+
+      const response = await fetch(tiktokApiUrl, {
+        signal: controller.signal,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (data.data && data.data.segments && data.data.segments.length > 0) {
+          console.log("[Utils] Successfully fetched TikTok transcript");
+
+          clearTimeout(timeoutId);
+
+          if (callbacks.onSuccess) {
+            callbacks.onSuccess({
+              segments: data.data.segments,
+              transcriptSource: "tiktok-rapidapi",
+              title: data.data.title || "TikTok Video",
+              embedUrl: url,
+              tiktokUrl: url,
+            });
+          }
+
+          if (callbacks.onComplete) {
+            callbacks.onComplete();
+          }
+
+          return;
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      } else {
+        throw new Error(`API responded with ${response.status}`);
+      }
+    } catch (error) {
+      console.error("[Utils] Error fetching TikTok transcript:", error);
+
+      clearTimeout(timeoutId);
+
+      if (callbacks.onError) {
+        callbacks.onError(
+          error instanceof Error ? error : new Error(String(error))
+        );
+      }
+    } finally {
+      if (callbacks.onComplete) {
+        callbacks.onComplete();
+      }
+    }
+  } catch (error) {
+    console.error("[Utils] Unhandled error in fetchTikTokTranscript:", error);
+
+    if (callbacks.onError) {
+      callbacks.onError(
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
+
+    if (callbacks.onComplete) {
+      callbacks.onComplete();
+    }
+  }
+};
+
+// Function to determine if a URL is for YouTube or TikTok and fetch appropriate transcript
+export const fetchVideoTranscript = async (
+  url: string,
+  callbacks: {
+    onStart?: () => void;
+    onSuccess?: (data: any) => void;
+    onError?: (error: Error) => void;
+    onComplete?: () => void;
+  } = {}
+) => {
+  if (validateYoutubeUrl(url)) {
+    return fetchTranscript(url, callbacks);
+  } else if (validateTikTokUrl(url)) {
+    return fetchTikTokTranscript(url, callbacks);
+  } else {
+    if (callbacks.onError) {
+      callbacks.onError(
+        new Error("Please enter a valid YouTube or TikTok URL")
+      );
+    }
+    if (callbacks.onComplete) {
+      callbacks.onComplete();
+    }
+  }
+};

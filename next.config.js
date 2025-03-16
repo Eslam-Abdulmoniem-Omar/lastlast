@@ -10,6 +10,7 @@ const nextConfig = {
       "firebasestorage.googleapis.com",
       "i.ytimg.com",
       "img.youtube.com",
+      "lh3.googleusercontent.com",
     ],
   },
   // Disable some features in development to reduce confusion

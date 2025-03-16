@@ -70,26 +70,48 @@ export async function getPodcastById(podcastId: string) {
   }
 }
 
-// New function to create a podcast with YouTube URL
-export async function createPodcastWithYouTube(
-  podcastData: Omit<Podcast, "id">
+// Function to create a podcast with video URL (YouTube or TikTok)
+export async function createPodcastWithVideo(
+  podcastData: Partial<Podcast>,
+  userId?: string
 ) {
   try {
-    // Add the podcast to Firestore
-    const docRef = await addDoc(collection(db, "podcasts"), {
+    // Add current timestamp if missing
+    const dataToSave = {
       ...podcastData,
-      publishedDate:
-        podcastData.publishedDate || new Date().toISOString().split("T")[0],
-    });
+      publishedDate: podcastData.publishedDate || new Date().toISOString(),
+      createdBy: userId || "anonymous",
+      createdAt: serverTimestamp(),
+    };
+
+    // If it's a TikTok video, ensure the correct videoSource field
+    if (podcastData.tiktokUrl && !podcastData.videoSource) {
+      dataToSave.videoSource = "tiktok";
+    } else if (podcastData.youtubeUrl && !podcastData.videoSource) {
+      dataToSave.videoSource = "youtube";
+    }
+
+    // Add the podcast to Firestore
+    const docRef = await addDoc(collection(db, "podcasts"), dataToSave);
+
+    console.log(`Created new podcast with ID: ${docRef.id}`);
 
     return {
       id: docRef.id,
-      ...podcastData,
+      ...dataToSave,
     } as Podcast;
   } catch (error) {
     console.error("Error creating podcast:", error);
     throw error;
   }
+}
+
+// Legacy function for backward compatibility
+export async function createPodcastWithYouTube(
+  podcastData: Partial<Podcast>,
+  userId?: string
+) {
+  return createPodcastWithVideo(podcastData, userId);
 }
 
 // User progress functions
