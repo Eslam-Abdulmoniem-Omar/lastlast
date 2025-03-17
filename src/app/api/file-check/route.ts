@@ -19,17 +19,13 @@ export async function GET() {
 
     // Try to list files in the src directory
     const srcPath = path.join(cwd, "src");
-    let srcFiles = [];
+    let srcFiles: string[] = [];
 
     if (fs.existsSync(srcPath)) {
       srcFiles = fs
-        .readdirSync(srcPath)
-        .filter(
-          (file) =>
-            file.endsWith(".json") ||
-            file.includes("metal") ||
-            file.includes("cascade")
-        );
+        .readdirSync(srcPath, { withFileTypes: true })
+        .filter((dirent) => dirent.isFile())
+        .map((dirent) => dirent.name);
     }
 
     // Search for similar files in src directory and subdirectories
