@@ -3,13 +3,6 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "outputDirectory": ".next",
-  "functions": {
-    "api/*.py": {
-      "memory": 1024,
-      "maxDuration": 60,
-      "runtime": "python@3.9"
-    }
-  },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "/$1" }
