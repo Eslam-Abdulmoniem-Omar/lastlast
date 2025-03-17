@@ -301,6 +301,21 @@ IMPORTANT:
           });
         }
 
+        // Check for varied segment lengths
+        const textLengths = dialogueSegments.map(
+          (segment: DialogueSegment) => segment.text.length
+        );
+        const avgLength =
+          textLengths.reduce((sum: number, len: number) => sum + len, 0) /
+          textLengths.length;
+        const hasVariedLengths = textLengths.some(
+          (len) => Math.abs(len - avgLength) > 10
+        );
+
+        if (hasVariedLengths) {
+          console.log("Varied segment lengths detected");
+        }
+
         return dialogueSegments;
       } catch (parseError) {
         console.error(
@@ -328,7 +343,7 @@ IMPORTANT:
  * using fuzzy text matching and alignment
  */
 function mapSegmentsToOriginalTiming(
-  gptSegments: { speakerName: string; text: string }[],
+  gptSegments: DialogueSegment[],
   originalTimingData: { text: string; startTime: number; endTime: number }[],
   totalDuration: number
 ): DialogueSegment[] {
@@ -354,7 +369,7 @@ function mapSegmentsToOriginalTiming(
   const mappedSegments: DialogueSegment[] = [];
 
   // For each GPT segment, try to find its position in the original text
-  gptSegments.forEach((segment, index) => {
+  gptSegments.forEach((segment: DialogueSegment, index: number) => {
     const segmentText = segment.text.trim();
 
     // Try to find this segment text in the original
@@ -1057,9 +1072,11 @@ export async function GET(request: Request) {
 
           if (segments.length >= 3) {
             // Check for varied segment lengths
-            const textLengths = segments.map((seg) => seg.text.length);
+            const textLengths = segments.map(
+              (seg: DialogueSegment) => seg.text.length
+            );
             const avgLength =
-              textLengths.reduce((sum: number, len) => sum + len, 0) /
+              textLengths.reduce((sum: number, len: number) => sum + len, 0) /
               textLengths.length;
             const hasVariedLengths = textLengths.some(
               (len) => Math.abs(len - avgLength) > 10
