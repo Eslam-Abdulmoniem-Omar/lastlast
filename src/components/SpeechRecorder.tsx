@@ -104,7 +104,14 @@ export default function SpeechRecorder({
         setRecordingTimer(null);
       }
     }
-  }, [isRecording, maxRecordingTime, disconnectFromDeepgram, recordingTimer]);
+  }, [
+    isRecording,
+    maxRecordingTime,
+    disconnectFromDeepgram,
+    recordingTimer,
+    setRecordingTimer,
+    setTimeRemaining,
+  ]);
 
   // Reset recording failed state when error changes
   useEffect(() => {

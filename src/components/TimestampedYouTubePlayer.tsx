@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Podcast, DialogueLine } from "@/lib/types";
 import {
   Play,
@@ -106,6 +106,7 @@ export default function TimestampedYouTubePlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [recordingTranscript, setRecordingTranscript] = useState("");
   const [playerReady, setPlayerReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [practiceMode, setPracticeMode] = useState<PracticeMode>("listening");
   const [recordingFeedback, setRecordingFeedback] = useState<string>("");
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
@@ -154,86 +155,11 @@ export default function TimestampedYouTubePlayer({
   const currentSentences = dialogueLines.map((line) => line.text);
   const currentSentence = currentSentences[currentSentenceIndex] || "";
 
-  // Load YouTube API
-  useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
-
-      window.onYouTubeIframeAPIReady = initializePlayer;
-    } else {
-      initializePlayer();
+  const startTimeTracking = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
 
-    return () => {
-      window.onYouTubeIframeAPIReady = null;
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
-
-  // Auto-activate the first dialogue line when component mounts
-  useEffect(() => {
-    if (dialogueLines.length > 0 && practiceMode === "listening") {
-      // Set the first line as active
-      setActiveLineId(dialogueLines[0].id);
-      // Set the current sentence index to 0
-      setCurrentSentenceIndex(0);
-    }
-  }, [dialogueLines, practiceMode]);
-
-  // Pause video when recording starts
-  useEffect(() => {
-    if (isRecording) {
-      pauseVideo();
-    }
-  }, [isRecording]);
-
-  // Initialize YouTube player
-  const initializePlayer = () => {
-    if (!podcast.youtubeUrl) return;
-
-    const videoId = extractVideoId(podcast.youtubeUrl);
-    if (!videoId) return;
-
-    if (playerRef.current) {
-      playerRef.current.destroy();
-    }
-
-    playerRef.current = new YT.Player("youtube-player", {
-      videoId,
-      playerVars: {
-        autoplay: 0,
-        controls: 1,
-        disablekb: 1,
-        fs: 0,
-        modestbranding: 1,
-        rel: 0,
-        enablejsapi: 1,
-        origin: window.location.origin,
-        playsinline: 1,
-      },
-      events: {
-        onReady: onPlayerReady,
-        onStateChange: onPlayerStateChange,
-      },
-    });
-  };
-
-  const onPlayerReady = (event: YT.PlayerEvent) => {
-    setPlayerReady(true);
-
-    // Automatically activate the first dialogue line
-    if (dialogueLines.length > 0) {
-      const firstLine = dialogueLines[0];
-      setActiveLineId(firstLine.id);
-      setCurrentSentenceIndex(0);
-    }
-
-    // Start a timer to update current time
     timerRef.current = setInterval(() => {
       if (playerRef.current && isPlaying) {
         const currentTime = playerRef.current.getCurrentTime();
@@ -258,30 +184,105 @@ export default function TimestampedYouTubePlayer({
         }
       }
     }, 100); // Update every 100ms
-  };
+  }, [dialogueLines, isPlaying]);
 
-  const onPlayerStateChange = (event: YT.OnStateChangeEvent) => {
-    if (event.data === YT.PlayerState.PLAYING) {
-      setIsPlaying(true);
-    } else if (
-      event.data === YT.PlayerState.PAUSED ||
-      event.data === YT.PlayerState.ENDED
-    ) {
-      setIsPlaying(false);
+  const stopTimeTracking = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  }, []);
+
+  // Initialize YouTube player
+  const initializePlayer = useCallback(() => {
+    if (!podcast.youtubeUrl) return;
+
+    const videoId = extractVideoId(podcast.youtubeUrl);
+    if (!videoId) return;
+
+    if (playerRef.current) {
+      playerRef.current.destroy();
     }
 
-    // Update progress when user watches the video
-    if (user && event.data === YT.PlayerState.PLAYING) {
-      updateListeningProgress(user.uid, podcast.id).catch((error) =>
-        console.error("Error updating listening progress:", error)
-      );
+    const onPlayerReady = (event: YT.PlayerEvent) => {
+      setPlayerReady(true);
+      setIsLoading(false);
+      event.target.setVolume(70);
+    };
+
+    const onPlayerStateChange = (event: YT.OnStateChangeEvent) => {
+      if (event.data === YT.PlayerState.PLAYING) {
+        setIsPlaying(true);
+        startTimeTracking();
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        setIsPlaying(false);
+        stopTimeTracking();
+      } else if (event.data === YT.PlayerState.ENDED) {
+        setIsPlaying(false);
+        stopTimeTracking();
+        onComplete?.();
+      }
+    };
+
+    playerRef.current = new YT.Player("youtube-player", {
+      videoId,
+      playerVars: {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        modestbranding: 1,
+        rel: 0,
+      },
+      events: {
+        onReady: onPlayerReady,
+        onStateChange: onPlayerStateChange,
+      },
+    });
+  }, [podcast.youtubeUrl, onComplete, startTimeTracking, stopTimeTracking]);
+
+  const pauseVideo = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.pauseVideo();
+    }
+  }, []);
+
+  // Load YouTube API
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+
+      window.onYouTubeIframeAPIReady = initializePlayer;
+    } else {
+      initializePlayer();
     }
 
-    // Trigger onComplete when the video is over
-    if (event.data === YT.PlayerState.ENDED) {
-      onComplete?.();
+    return () => {
+      window.onYouTubeIframeAPIReady = null;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [initializePlayer]);
+
+  // Pause video when recording starts
+  useEffect(() => {
+    if (isRecording) {
+      pauseVideo();
     }
-  };
+  }, [isRecording, pauseVideo]);
+
+  // Auto-activate the first dialogue line when component mounts
+  useEffect(() => {
+    if (dialogueLines.length > 0 && practiceMode === "listening") {
+      // Set the first line as active
+      setActiveLineId(dialogueLines[0].id);
+      // Set the current sentence index to 0
+      setCurrentSentenceIndex(0);
+    }
+  }, [dialogueLines, practiceMode]);
 
   const extractVideoId = (url: string): string | null => {
     const regExp =
@@ -353,13 +354,6 @@ export default function TimestampedYouTubePlayer({
     } catch (error) {
       console.error("Error seeking to timestamp:", error);
     }
-  };
-
-  const pauseVideo = () => {
-    if (!playerRef.current || !playerReady) return;
-
-    playerRef.current.pauseVideo();
-    setIsPlaying(false);
   };
 
   const togglePlayPause = () => {

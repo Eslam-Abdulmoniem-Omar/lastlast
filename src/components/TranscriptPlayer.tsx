@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Podcast, DialogueLine } from "@/lib/types";
 import {
   Play,
@@ -45,6 +45,7 @@ export default function TranscriptPlayer({
     undefined
   );
   const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const playerRef = useRef<YT.Player | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -122,6 +123,60 @@ export default function TranscriptPlayer({
   const currentSentences = dialogueLines.map((line) => line.text);
   const currentSentence = currentSentences[currentSentenceIndex] || "";
 
+  // Initialize YouTube player
+  const initializePlayer = useCallback(() => {
+    if (!podcast.youtubeUrl) return;
+
+    const videoId = extractVideoId(podcast.youtubeUrl);
+    if (!videoId) return;
+
+    if (playerRef.current) {
+      playerRef.current.destroy();
+    }
+
+    const onPlayerReady = (event: YT.PlayerEvent) => {
+      setPlayerReady(true);
+      setIsLoading(false);
+      event.target.setVolume(70);
+    };
+
+    const onPlayerStateChange = (event: YT.OnStateChangeEvent) => {
+      if (event.data === YT.PlayerState.PLAYING) {
+        setIsPlaying(true);
+        startTimeTracking();
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        setIsPlaying(false);
+        stopTimeTracking();
+      } else if (event.data === YT.PlayerState.ENDED) {
+        setIsPlaying(false);
+        stopTimeTracking();
+        onComplete?.();
+      }
+    };
+
+    playerRef.current = new YT.Player("youtube-player", {
+      videoId,
+      playerVars: {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        modestbranding: 1,
+        rel: 0,
+      },
+      events: {
+        onReady: onPlayerReady,
+        onStateChange: onPlayerStateChange,
+      },
+    });
+  }, [podcast.youtubeUrl, onComplete]);
+
+  const pauseVideo = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.pauseVideo();
+    }
+  }, []);
+
   // Load YouTube API
   useEffect(() => {
     if (!window.YT) {
@@ -141,42 +196,14 @@ export default function TranscriptPlayer({
         clearInterval(timerRef.current);
       }
     };
-  }, []);
+  }, [initializePlayer]);
 
   // Pause video when recording starts
   useEffect(() => {
     if (isRecording) {
       pauseVideo();
     }
-  }, [isRecording]);
-
-  // Initialize YouTube player
-  const initializePlayer = () => {
-    if (!podcast.youtubeUrl) return;
-
-    const videoId = extractVideoId(podcast.youtubeUrl);
-    if (!videoId) return;
-
-    if (playerRef.current) {
-      playerRef.current.destroy();
-    }
-
-    playerRef.current = new YT.Player("youtube-player", {
-      videoId,
-      playerVars: {
-        autoplay: 0,
-        controls: 0,
-        disablekb: 1,
-        fs: 0,
-        modestbranding: 1,
-        rel: 0,
-      },
-      events: {
-        onReady: onPlayerReady,
-        onStateChange: onPlayerStateChange,
-      },
-    });
-  };
+  }, [isRecording, pauseVideo]);
 
   const onPlayerReady = (event: YT.PlayerEvent) => {
     setPlayerReady(true);
@@ -260,13 +287,6 @@ export default function TranscriptPlayer({
         setCurrentSentenceIndex(lineIndex);
       }
     }
-  };
-
-  const pauseVideo = () => {
-    if (!playerRef.current || !playerReady) return;
-
-    playerRef.current.pauseVideo();
-    setIsPlaying(false);
   };
 
   const togglePlayPause = () => {

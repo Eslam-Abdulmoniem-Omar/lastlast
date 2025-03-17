@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -34,6 +34,8 @@ import {
   getTranscriptSourceInfo,
 } from "@/lib/utils/youtubeUtils";
 import ProtectedRoute from "@/app/components/ProtectedRoute";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase/firebase";
 
 export default function AddYouTubeShortPageWrapper() {
   // Use the ProtectedRoute component to wrap the actual page content
@@ -115,68 +117,80 @@ function AddYouTubeShortPage() {
     }
   };
 
-  // Function to fetch transcript for a YouTube URL
-  const fetchTranscript = async (url: string) => {
-    if (!validateYoutubeUrl(url) && !validateTikTokUrl(url)) {
-      setError("Please enter a valid YouTube or TikTok URL first");
-      return;
-    }
-
+  const fetchTranscript = useCallback(async (url: string) => {
     try {
       setIsLoading(true);
-      setError(null);
-      setIsProcessing(true);
+      const response = await fetch(
+        `/api/youtube/metadata?url=${encodeURIComponent(url)}`
+      );
+      const data = await response.json();
 
-      await fetchVideoTranscript(url, {
-        onStart: () => {
-          // We handle loading state in component
-        },
-        onSuccess: (data) => {
-          // Set video details from metadata
-          setTitle(data.title);
-          setEmbedUrl(data.embedUrl);
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
 
-          // Use the segments from metadata response
-          if (data.segments && data.segments.length > 0) {
-            setDialogueSegments(data.segments);
-            setTranscriptSource(data.transcriptSource);
-            setSuccess(true);
-          } else {
-            // Create default segments if none were returned
-            console.warn("No segments returned from metadata API");
-            const defaultSegments = createDefaultSegments();
-            setDialogueSegments(defaultSegments);
-            setTranscriptSource("default");
-          }
-        },
-        onError: (error) => {
-          setError(
-            `Failed to fetch video data: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
-
-          // Create default segments on error
-          const defaultSegments = createDefaultSegments();
-          setDialogueSegments(defaultSegments);
-          setTranscriptSource("default");
-        },
-        onComplete: () => {
-          setIsLoading(false);
-          setIsProcessing(false);
-        },
-      });
+      if (data.data.segments) {
+        setDialogueSegments(data.data.segments);
+      }
     } catch (error) {
-      console.error("Error in fetchTranscript:", error);
-      // This is a fallback in case something goes wrong with the utility function
+      console.error("Error fetching transcript:", error);
+      toast.error("Failed to fetch transcript");
+    } finally {
       setIsLoading(false);
-      setIsProcessing(false);
     }
-  };
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+
+      if (!youtubeUrl) {
+        toast.error("Please enter a YouTube URL");
+        return;
+      }
+
+      if (!validateYoutubeUrl(youtubeUrl)) {
+        toast.error("Please enter a valid YouTube URL");
+        return;
+      }
+
+      if (!user) {
+        toast.error("Please sign in to add a video");
+        return;
+      }
+
+      try {
+        setIsSubmitting(true);
+
+        // Create the short video document
+        const shortVideoRef = await addDoc(collection(db, "shortVideos"), {
+          youtubeUrl,
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+          topics: topics,
+          dialogueSegments,
+          title: title || "Untitled",
+          description: description || "",
+          isPublic,
+        });
+
+        toast.success("Video added successfully!");
+
+        // Redirect to the video page
+        router.push(`/short-videos/${shortVideoRef.id}`);
+      } catch (error) {
+        console.error("Error adding video:", error);
+        toast.error("Failed to add video");
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [youtubeUrl, user, topics, dialogueSegments, title, description, router]
+  );
 
   useEffect(() => {
     const handleUrlFromQuery = async () => {
-      // Check for URL in query parameters
       const searchParams = new URLSearchParams(window.location.search);
       const urlFromQuery = searchParams.get("url");
 
@@ -184,10 +198,8 @@ function AddYouTubeShortPage() {
         setYoutubeUrl(urlFromQuery);
         setIsAutoSubmitMode(true);
 
-        // Use the fetchTranscript function to get segments
         await fetchTranscript(urlFromQuery);
 
-        // Auto-submit after a short delay to allow user to see what's being submitted
         if (user) {
           setTimeout(() => {
             handleSubmit({ preventDefault: () => {} } as React.FormEvent);
@@ -197,7 +209,7 @@ function AddYouTubeShortPage() {
     };
 
     handleUrlFromQuery();
-  }, [user, router, isAutoSubmitMode]); // Added isAutoSubmitMode to dependencies
+  }, [user, router, isAutoSubmitMode, fetchTranscript, handleSubmit]);
 
   const addTopic = () => {
     if (newTopic.trim() && !topics.includes(newTopic.trim())) {
@@ -242,67 +254,6 @@ function AddYouTubeShortPage() {
     setDialogueSegments(
       dialogueSegments.filter((_: any, i: number) => i !== index)
     );
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validate required fields
-    if (!title) {
-      setError("Please enter a title for the video");
-      return;
-    }
-
-    if (dialogueSegments.length === 0) {
-      setError("Please add at least one dialogue segment");
-      return;
-    }
-
-    if (!validateYoutubeUrl(youtubeUrl) && !validateTikTokUrl(youtubeUrl)) {
-      setError("Please enter a valid YouTube or TikTok URL");
-      return;
-    }
-
-    // Set flags
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      const isYouTube = validateYoutubeUrl(youtubeUrl);
-      const isTikTok = validateTikTokUrl(youtubeUrl);
-
-      // Create a new podcast with YouTube/TikTok data
-      const podcastData: Partial<Podcast> = {
-        title,
-        description,
-        level,
-        topics,
-        youtubeUrl: isYouTube ? youtubeUrl : undefined,
-        tiktokUrl: isTikTok ? youtubeUrl : undefined,
-        videoSource: isYouTube ? "youtube" : "tiktok",
-        dialogueSegments,
-        isShort: true,
-      };
-
-      // Call Firebase utility to create the podcast
-      await createPodcastWithYouTube(podcastData, user?.uid);
-
-      // Show success message
-      toast.success("Short video saved successfully!");
-
-      // Wait a moment to show the success message before navigating
-      setTimeout(() => {
-        router.push("/short-videos");
-      }, 2000);
-    } catch (error) {
-      console.error("Error saving podcast:", error);
-      setError(
-        `Failed to save podcast: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-      setIsSubmitting(false);
-    }
   };
 
   // Function to handle starting practice
