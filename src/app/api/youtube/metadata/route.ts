@@ -301,21 +301,6 @@ IMPORTANT:
           });
         }
 
-        // Check for varied segment lengths
-        const textLengths = dialogueSegments.map(
-          (segment: DialogueSegment) => segment.text.length
-        );
-        const avgLength =
-          textLengths.reduce((sum: number, len: number) => sum + len, 0) /
-          textLengths.length;
-        const hasVariedLengths = textLengths.some(
-          (len) => Math.abs(len - avgLength) > 10
-        );
-
-        if (hasVariedLengths) {
-          console.log("Varied segment lengths detected");
-        }
-
         return dialogueSegments;
       } catch (parseError) {
         console.error(
@@ -369,7 +354,7 @@ function mapSegmentsToOriginalTiming(
   const mappedSegments: DialogueSegment[] = [];
 
   // For each GPT segment, try to find its position in the original text
-  gptSegments.forEach((segment: DialogueSegment, index: number) => {
+  gptSegments.forEach((segment: DialogueSegment) => {
     const segmentText = segment.text.trim();
 
     // Try to find this segment text in the original
@@ -427,7 +412,7 @@ function mapSegmentsToOriginalTiming(
         const prevSegment = mappedSegments[mappedSegments.length - 1];
         if (segmentStartTime < prevSegment.endTime) {
           // Make sure segments don't overlap
-          if (index > 0) segmentStartTime = prevSegment.endTime;
+          if (position > 0) segmentStartTime = prevSegment.endTime;
         }
       }
 
@@ -1072,11 +1057,9 @@ export async function GET(request: Request) {
 
           if (segments.length >= 3) {
             // Check for varied segment lengths
-            const textLengths = segments.map(
-              (seg: DialogueSegment) => seg.text.length
-            );
+            const textLengths = segments.map((seg) => seg.text.length);
             const avgLength =
-              textLengths.reduce((sum: number, len: number) => sum + len, 0) /
+              textLengths.reduce((sum, len) => sum + len, 0) /
               textLengths.length;
             const hasVariedLengths = textLengths.some(
               (len) => Math.abs(len - avgLength) > 10

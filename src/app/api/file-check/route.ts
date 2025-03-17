@@ -2,12 +2,6 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-interface SearchResult {
-  name: string;
-  path: string;
-  size: number;
-}
-
 export async function GET() {
   try {
     // Get current working directory
@@ -25,19 +19,23 @@ export async function GET() {
 
     // Try to list files in the src directory
     const srcPath = path.join(cwd, "src");
-    let srcFiles: string[] = [];
+    let srcFiles = [];
 
     if (fs.existsSync(srcPath)) {
       srcFiles = fs
-        .readdirSync(srcPath, { withFileTypes: true })
-        .filter((dirent) => dirent.isFile())
-        .map((dirent) => dirent.name);
+        .readdirSync(srcPath)
+        .filter(
+          (file) =>
+            file.endsWith(".json") ||
+            file.includes("metal") ||
+            file.includes("cascade")
+        );
     }
 
     // Search for similar files in src directory and subdirectories
-    const searchResults: SearchResult[] = [];
+    const searchResults = [];
     if (fs.existsSync(srcPath)) {
-      const walkDir = (dir: string, depth = 0) => {
+      const walkDir = (dir, depth = 0) => {
         if (depth > 3) return; // Limit depth to avoid infinite recursion
 
         const files = fs.readdirSync(dir);
