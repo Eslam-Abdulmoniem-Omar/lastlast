@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postinstall": "node src/scripts/install_deps.js",
     "start": "next start",
     "start:prod": "NODE_ENV=production next start",
     "lint": "next lint",
