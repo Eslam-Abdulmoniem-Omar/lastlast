@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
+interface SearchResult {
+  name: string;
+  path: string;
+  size: number;
+}
+
 export async function GET() {
   try {
     // Get current working directory
@@ -29,9 +35,9 @@ export async function GET() {
     }
 
     // Search for similar files in src directory and subdirectories
-    const searchResults = [];
+    const searchResults: SearchResult[] = [];
     if (fs.existsSync(srcPath)) {
-      const walkDir = (dir, depth = 0) => {
+      const walkDir = (dir: string, depth = 0) => {
         if (depth > 3) return; // Limit depth to avoid infinite recursion
 
         const files = fs.readdirSync(dir);
