@@ -271,36 +271,34 @@ IMPORTANT:
 
           // Calculate estimated durations based on text length
           const totalTextLength = validSegments.reduce(
-            (sum: number, segment: { text: string }) =>
+            (sum: number, segment: DialogueSegment) =>
               sum + segment.text.length,
             0
           );
 
           let currentTime = 0;
-          dialogueSegments = validSegments.map(
-            (segment: { text: string; speakerName: string }) => {
-              // Estimate duration based on text length proportion
-              const proportion = segment.text.length / totalTextLength;
-              const estimatedDuration = totalDuration * proportion;
+          dialogueSegments = validSegments.map((segment: DialogueSegment) => {
+            // Estimate duration based on text length proportion
+            const proportion = segment.text.length / totalTextLength;
+            const estimatedDuration = totalDuration * proportion;
 
-              // Add some natural variation (±15%) to avoid mechanical timing
-              const variationFactor = 0.85 + Math.random() * 0.3; // 0.85 to 1.15
-              const adjustedDuration = estimatedDuration * variationFactor;
+            // Add some natural variation (±15%) to avoid mechanical timing
+            const variationFactor = 0.85 + Math.random() * 0.3; // 0.85 to 1.15
+            const adjustedDuration = estimatedDuration * variationFactor;
 
-              const startTime = currentTime;
-              const endTime = currentTime + adjustedDuration;
-              currentTime = endTime;
+            const startTime = currentTime;
+            const endTime = currentTime + adjustedDuration;
+            currentTime = endTime;
 
-              return {
-                id: uuidv4(),
-                speakerName: segment.speakerName,
-                text: segment.text,
-                startTime,
-                endTime,
-                vocabularyItems: [],
-              };
-            }
-          );
+            return {
+              id: uuidv4(),
+              speakerName: segment.speakerName,
+              text: segment.text,
+              startTime,
+              endTime,
+              vocabularyItems: [],
+            };
+          });
         }
 
         return dialogueSegments;
