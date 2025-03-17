@@ -1,11 +1,11 @@
 [build]
-  command = "python -V && npm install --legacy-peer-deps && npm run build"
+  command = "npm install --legacy-peer-deps && npm run build"
   publish = "build"
 
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
   NODE_VERSION = "18.17.0"
-  PYTHON_VERSION = "3.9"
+  PYTHON_VERSION = "3.8"
   NPM_FLAGS = "--legacy-peer-deps --max-old-space-size=4096"
   NODE_OPTIONS = "--max_old_space_size=4096"
 
@@ -28,9 +28,6 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-[[plugins]]
-  package = "@netlify/plugin-python"
 
 [functions]
   included_files = ["node_modules/@netlify/plugin-nextjs/**/*"]
