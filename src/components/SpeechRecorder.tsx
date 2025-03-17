@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 
 interface SpeechRecorderProps {
   onTranscriptChange?: (transcript: string) => void;
+  onTranscriptionComplete?: (transcription: string, accuracy: number) => void;
   onRecordingStateChange?: (isRecording: boolean) => void;
   className?: string;
   iconSize?: number;
@@ -16,10 +17,13 @@ interface SpeechRecorderProps {
   showDetailedConfig?: boolean;
   disabled?: boolean;
   maxRecordingTime?: number;
+  referenceSentence?: string;
+  showComparison?: boolean;
 }
 
 export default function SpeechRecorder({
   onTranscriptChange,
+  onTranscriptionComplete,
   onRecordingStateChange,
   className = "",
   iconSize = 24,
@@ -29,6 +33,8 @@ export default function SpeechRecorder({
   showDetailedConfig = false,
   disabled = false,
   maxRecordingTime = 10000, // Default 10 seconds max recording time
+  referenceSentence = "",
+  showComparison = false,
 }: SpeechRecorderProps) {
   const [showConfigDetails, setShowConfigDetails] = useState(false);
   const [recordingTimer, setRecordingTimer] = useState<number | null>(null);

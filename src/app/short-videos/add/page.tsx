@@ -78,6 +78,7 @@ function AddYouTubeShortPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [practiceStarted, setPracticeStarted] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
 
   const handleVideoUrlChange = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -166,13 +167,13 @@ function AddYouTubeShortPage() {
         // Create the short video document
         const shortVideoRef = await addDoc(collection(db, "shortVideos"), {
           youtubeUrl,
-          userId: user.uid,
+          userId: user.id,
           createdAt: serverTimestamp(),
           topics: topics,
           dialogueSegments,
           title: title || "Untitled",
           description: description || "",
-          isPublic,
+          isPublic: isPublic || false,
         });
 
         toast.success("Video added successfully!");
@@ -186,7 +187,16 @@ function AddYouTubeShortPage() {
         setIsSubmitting(false);
       }
     },
-    [youtubeUrl, user, topics, dialogueSegments, title, description, router]
+    [
+      youtubeUrl,
+      user,
+      topics,
+      dialogueSegments,
+      title,
+      description,
+      router,
+      isPublic,
+    ]
   );
 
   useEffect(() => {

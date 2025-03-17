@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { SpeechClient } from "@google-cloud/speech";
+import { SpeechClient, protos } from "@google-cloud/speech";
 import path from "path";
 import fs from "fs";
 
@@ -188,29 +188,28 @@ export async function POST(request: Request) {
     }
 
     // Configure the request
-    const audio = {
-      content: audioBytes.toString("base64"),
-    };
-
-    const config = {
-      encoding: "WEBM_OPUS",
-      sampleRateHertz: 48000,
-      languageCode: "en-US",
-      model: "default",
-      enableAutomaticPunctuation: true,
-    };
-
-    console.log("Configured request for Google Cloud Speech API");
-    const recognizeRequest = {
-      audio: audio,
-      config: config,
+    const audioContent = audioBytes.toString("base64");
+    const recognizeRequest: protos.google.cloud.speech.v1.IRecognizeRequest = {
+      audio: {
+        content: audioContent,
+      },
+      config: {
+        encoding:
+          protos.google.cloud.speech.v1.RecognitionConfig.AudioEncoding
+            .LINEAR16,
+        sampleRateHertz: 16000,
+        languageCode: "en-US",
+        model: "default",
+        enableAutomaticPunctuation: true,
+      },
     };
 
     // Detects speech in the audio file
     console.log("Sending request to Google Cloud Speech API...");
     let response;
     try {
-      [response] = await speechClient.recognize(recognizeRequest);
+      const result = await speechClient.recognize(recognizeRequest);
+      response = result[0];
       console.log("Received response from Google Cloud Speech API");
     } catch (apiError) {
       console.error("API Error from Google Cloud Speech:", apiError);

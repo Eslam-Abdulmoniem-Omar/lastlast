@@ -2,6 +2,7 @@
 
 const nextConfig = {
   output: "standalone", // Optimizes for deployment
+  distDir: "build", // This will create a 'build' folder instead of '.next'
   reactStrictMode: true,
   swcMinify: true,
   images: {

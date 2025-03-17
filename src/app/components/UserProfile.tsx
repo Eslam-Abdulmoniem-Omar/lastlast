@@ -32,10 +32,10 @@ export default function UserProfile() {
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex flex-col items-center">
         <div className="relative w-24 h-24 mb-4">
-          {user.photoURL && !imageError ? (
+          {user.profilePicture && !imageError ? (
             <Image
-              src={user.photoURL}
-              alt={user.displayName || "User"}
+              src={user.profilePicture}
+              alt={user.name || "User"}
               fill
               className="rounded-full object-cover"
               onError={() => setImageError(true)}
@@ -43,14 +43,14 @@ export default function UserProfile() {
               priority
             />
           ) : (
-            <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
-              <FiUser className="h-12 w-12 text-gray-500" />
+            <div className="w-full h-full rounded-full bg-gray-200 flex items-center justify-center">
+              <FiUser className="w-12 h-12 text-gray-400" />
             </div>
           )}
         </div>
 
         <h2 className="text-xl font-semibold text-gray-800">
-          {user.displayName || "User"}
+          {user.name || "User"}
         </h2>
 
         <p className="text-sm text-gray-500 mt-1">{user.email}</p>

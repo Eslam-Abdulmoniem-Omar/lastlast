@@ -25,6 +25,16 @@ const possiblePaths = [
   ),
 ];
 
+interface ErrorDetails {
+  error: string;
+  message: string;
+}
+
+interface Result {
+  success: boolean;
+  details: ErrorDetails | null;
+}
+
 export async function GET() {
   try {
     // Search all possible paths
@@ -35,11 +45,8 @@ export async function GET() {
     for (const credentialsPath of possiblePaths) {
       const exists = fs.existsSync(credentialsPath);
 
-      const result = {
-        path: credentialsPath,
-        exists: exists,
-        valid: false,
-        size: 0,
+      const result: Result = {
+        success: false,
         details: null,
       };
 
@@ -47,11 +54,12 @@ export async function GET() {
         try {
           const fileContent = fs.readFileSync(credentialsPath, "utf8");
           const fileSize = fileContent.length;
-          result.size = fileSize;
+          result.success = true;
+          result.details = null;
 
           try {
             const credentials = JSON.parse(fileContent);
-            result.valid = true;
+            result.success = true;
 
             // Store first valid credentials data
             if (!foundCredentialsFile) {
@@ -83,7 +91,7 @@ export async function GET() {
     const currentDirectory = process.cwd();
     const srcPath = path.join(currentDirectory, "src");
     const srcExists = fs.existsSync(srcPath);
-    let srcContents = [];
+    let srcContents: string[] = [];
 
     if (srcExists) {
       try {
