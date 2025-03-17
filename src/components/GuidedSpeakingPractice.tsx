@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { DialogueLine } from "@/lib/types";
+import type { FC } from "react";
 import {
   CheckCircle,
   XCircle,
