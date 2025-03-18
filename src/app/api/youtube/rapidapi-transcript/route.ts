@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 export const revalidate = 0;
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { DialogueSegment } from "@/lib/types";
@@ -42,12 +42,8 @@ async function getTranscript(videoId: string): Promise<any> {
       `Successfully fetched transcript with ${transcript.length} entries`
     );
 
-    // Limit the number of segments to prevent large responses
-    const MAX_SEGMENTS = 100;
-    const limitedTranscript = transcript.slice(0, MAX_SEGMENTS);
-
     return {
-      result: limitedTranscript.map((entry: any) => ({
+      result: transcript.map((entry: any) => ({
         text: entry.text,
         start: entry.start,
         duration: entry.dur,
@@ -64,11 +60,11 @@ async function getTranscript(videoId: string): Promise<any> {
 
 export async function GET(request: Request) {
   try {
-  const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(request.url);
     const url = searchParams.get("url");
 
     if (!url) {
-    return NextResponse.json(
+      return NextResponse.json(
         { error: "URL parameter is required" },
         {
           status: 400,

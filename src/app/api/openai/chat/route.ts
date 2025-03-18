@@ -1,92 +1,98 @@
-import { OpenAI } from "openai";
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
 // IMPORTANT! Set the dynamic to force-dynamic to disable static rendering
 export const dynamic = "force-dynamic";
 
 // Create an OpenAI API client
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    // Log environment variable status (without exposing the key)
+    // Log API key status (without exposing the key)
     console.log("OpenAI API Key configured:", !!process.env.OPENAI_API_KEY);
 
-    const { messages } = await req.json();
+    const body = await request.json();
+    const { messages } = body;
+
+    // Log received messages
     console.log("Received messages:", messages);
 
     // Validate OpenAI API key
     if (!process.env.OPENAI_API_KEY) {
       console.error("OpenAI API key is not configured");
       return NextResponse.json(
-        {
-          error:
-            "OpenAI API key is not configured. Please check your .env.local file.",
-          details:
-            "Make sure you have added OPENAI_API_KEY=your_key_here to your .env.local file",
-        },
+        { error: "OpenAI API key is not configured" },
         { status: 500 }
       );
     }
 
     // Validate messages
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      console.error("Invalid messages format");
       return NextResponse.json(
-        {
-          error: "Invalid messages format",
-          details: "Messages must be an array with at least one message",
-        },
+        { error: "Invalid messages format" },
         { status: 400 }
       );
     }
 
-    console.log("Making OpenAI API request...");
+    // Determine the type of request
+    const isVocabularyRequest = messages[0].content.includes(
+      "Translate this word:"
+    );
+    const isTranscriptRequest = messages[0].content.includes(
+      "You are a helpful assistant that processes dialogue segments"
+    );
 
-    // Ask OpenAI for a completion without streaming
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages,
+    // Configure request based on type
+    const requestConfig = {
+      model: "gpt-3.5-turbo",
+      messages: messages,
       temperature: 0.7,
-      max_tokens: 2000,
-    });
-
-    console.log("Received OpenAI response");
-
-    // Parse the response content as JSON
-    const content = response.choices[0].message.content;
-    let parsedContent;
-
-    try {
-      parsedContent = JSON.parse(content);
-    } catch (parseError) {
-      console.error("Failed to parse OpenAI response as JSON:", parseError);
-      return NextResponse.json(
-        {
-          error: "Failed to parse OpenAI response",
-          details: "The response was not in valid JSON format",
-        },
-        { status: 500 }
-      );
-    }
-
-    // Return the parsed JSON response
-    return NextResponse.json(parsedContent);
-  } catch (error) {
-    console.error("Error processing chat request:", error);
-
-    // Provide more detailed error information
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    const errorDetails = {
-      error: "Error processing request",
-      details: errorMessage,
-      type: error instanceof Error ? error.constructor.name : typeof error,
-      stack: error instanceof Error ? error.stack : undefined,
+      max_tokens: isVocabularyRequest ? 200 : 1000,
+      response_format: { type: "json_object" },
     };
 
-    return NextResponse.json(errorDetails, { status: 500 });
+    // Make the OpenAI API request
+    const completion = await openai.chat.completions.create(requestConfig);
+
+    // Log the response
+    console.log("OpenAI response:", completion.choices[0].message);
+
+    // For transcript requests, ensure the response is an array
+    if (isTranscriptRequest) {
+      try {
+        const content = completion.choices[0].message.content;
+        const parsedContent = JSON.parse(content);
+
+        // Ensure the response is an array
+        if (!Array.isArray(parsedContent)) {
+          throw new Error("Response is not an array");
+        }
+
+        return NextResponse.json(parsedContent);
+      } catch (parseError) {
+        console.error("Failed to parse transcript response:", parseError);
+        return NextResponse.json(
+          { error: "Failed to parse transcript response" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // For vocabulary requests, return the content directly
+    return NextResponse.json({
+      content: completion.choices[0].message.content,
+    });
+  } catch (error) {
+    console.error("Error in OpenAI API route:", error);
+    return NextResponse.json(
+      {
+        error: "Failed to process request",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
   }
 }

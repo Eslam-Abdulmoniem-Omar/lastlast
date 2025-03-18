@@ -36,6 +36,8 @@ import {
 import ProtectedRoute from "@/app/components/ProtectedRoute";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase/firebase";
+import { TranscriptSegment } from "@/types/transcript";
+import { processTranscriptWithOpenAI } from "@/lib/utils/openai";
 
 export default function AddYouTubeShortPageWrapper() {
   // Use the ProtectedRoute component to wrap the actual page content
@@ -53,6 +55,7 @@ function AddYouTubeShortPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [videoId, setVideoId] = useState("");
   const [embedUrl, setEmbedUrl] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -79,10 +82,80 @@ function AddYouTubeShortPage() {
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [practiceStarted, setPracticeStarted] = useState(false);
 
+  const fetchTranscript = useCallback(async (url: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Extract video ID from URL
+      const extractedVideoId = extractVideoId(url);
+      if (!extractedVideoId) {
+        throw new Error("Invalid YouTube URL");
+      }
+      setVideoId(extractedVideoId);
+
+      // Fetch transcript using RapidAPI
+      const response = await fetch(
+        `http://localhost:3000/api/youtube/rapidapi-transcript?url=${encodeURIComponent(
+          url
+        )}`
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch transcript: ${response.statusText}`);
+      }
+      const data = await response.json();
+
+      // Check if data has the expected structure
+      if (!data || !data.data || !data.data.segments) {
+        console.error("Unexpected response structure:", data);
+        throw new Error("Invalid transcript data format");
+      }
+
+      // Set video metadata first
+      if (data.data.title) {
+        setTitle(data.data.title);
+      }
+      if (data.data.embedUrl) {
+        setEmbedUrl(data.data.embedUrl);
+      }
+
+      // Convert transcript segments to dialogue segments
+      const convertedSegments = data.data.segments.map((segment: any) => ({
+        id: segment.id || uuidv4(),
+        speakerName: segment.speakerName || "Speaker",
+        text: segment.text,
+        startTime: parseFloat(segment.startTime) || 0,
+        endTime: parseFloat(segment.endTime) || 0,
+        vocabularyItems: segment.vocabularyItems || [],
+      }));
+
+      // Set the initial segments
+      setDialogueSegments(convertedSegments);
+
+      // Try to process with OpenAI, but don't block if it fails
+      try {
+        const processedSegments = await processTranscriptWithOpenAI(
+          convertedSegments
+        );
+        setDialogueSegments(processedSegments);
+      } catch (openaiError) {
+        console.error("OpenAI processing failed:", openaiError);
+        // Don't throw the error, just log it and continue with original segments
+      }
+    } catch (err) {
+      console.error("Error fetching transcript:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch transcript"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const handleVideoUrlChange = async (url: string) => {
     try {
       setIsLoading(true);
-        setError(null);
+      setError(null);
 
       // First try to get the transcript using RapidAPI
       const rapidApiResponse = await fetch(
@@ -122,7 +195,7 @@ function AddYouTubeShortPage() {
         segments: processedSegments,
       });
       setVideoUrl(url);
-      } catch (error) {
+    } catch (error) {
       console.error("Error fetching transcript:", error);
       setError(
         error instanceof Error ? error.message : "Failed to fetch transcript"
@@ -166,7 +239,7 @@ function AddYouTubeShortPage() {
 1. Keep the same speaker names and timing
 2. Improve the text to be more natural and fluent
 3. Maintain the same meaning and context
-4. Return the response in the exact same JSON format as the input
+4. Return the response as a JSON array of objects with the same structure as the input
 
 Input format example:
 [
@@ -333,15 +406,20 @@ Return the response in exactly the same format, just with improved text.`,
   );
 
   useEffect(() => {
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
     const handleUrlFromQuery = async () => {
       const searchParams = new URLSearchParams(window.location.search);
       const urlFromQuery = searchParams.get("url");
 
       if (urlFromQuery && validateYoutubeUrl(urlFromQuery)) {
-        setYoutubeUrl(urlFromQuery);
+        setVideoUrl(urlFromQuery);
         setIsAutoSubmitMode(true);
 
-        await handleVideoUrlChange(urlFromQuery);
+        await fetchTranscript(urlFromQuery);
 
         if (user) {
           setTimeout(() => {
@@ -352,7 +430,7 @@ Return the response in exactly the same format, just with improved text.`,
     };
 
     handleUrlFromQuery();
-  }, [user, router, isAutoSubmitMode, handleVideoUrlChange, handleSubmit]);
+  }, [user, router, isAutoSubmitMode, handleSubmit, fetchTranscript]);
 
   const addTopic = () => {
     if (newTopic.trim() && !topics.includes(newTopic.trim())) {
@@ -451,7 +529,7 @@ Return the response in exactly the same format, just with improved text.`,
           />
           <button
             type="button"
-            onClick={() => handleVideoUrlChange(youtubeUrl)}
+            onClick={() => fetchTranscript(youtubeUrl)}
             disabled={isLoading || !validateYoutubeUrl(youtubeUrl)}
             className={`bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 flex items-center ${
               isLoading || !validateYoutubeUrl(youtubeUrl)
@@ -524,6 +602,95 @@ Return the response in exactly the same format, just with improved text.`,
         </div>
       </div>
     );
+  };
+
+  const handleTranslateVocabulary = async (segmentId: string, word: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Create the messages array for OpenAI
+      const messages = [
+        {
+          role: "system",
+          content: `You are a helpful assistant that translates vocabulary. Your task is to:
+1. Translate the given word to English
+2. Provide a simple example sentence using the word
+3. Return the response in JSON format
+
+Example response format:
+{
+  "translation": "translated word",
+  "example": "example sentence"
+}`,
+        },
+        {
+          role: "user",
+          content: `Translate this word: ${word}`,
+        },
+      ];
+
+      console.log("Sending translation request to OpenAI...");
+      const response = await fetch("/api/openai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to translate vocabulary");
+      }
+
+      const data = await response.json();
+      console.log("Received OpenAI response:", data);
+
+      // Parse the response content as JSON
+      let translationData;
+      try {
+        translationData = JSON.parse(data.content);
+        if (!translationData.translation || !translationData.example) {
+          throw new Error("Invalid translation response format");
+        }
+      } catch (parseError) {
+        console.error("Failed to parse OpenAI response as JSON:", parseError);
+        throw new Error("Invalid translation response format");
+      }
+
+      // Update the vocabulary item in the segment
+      setDialogueSegments((prevSegments) =>
+        prevSegments.map((segment) => {
+          if (segment.id === segmentId) {
+            return {
+              ...segment,
+              vocabularyItems: segment.vocabularyItems.map((item) =>
+                item.word === word
+                  ? {
+                      ...item,
+                      translation: translationData.translation,
+                      example: translationData.example,
+                    }
+                  : item
+              ),
+            };
+          }
+          return segment;
+        })
+      );
+
+      toast.success("Translation added successfully!");
+    } catch (error) {
+      console.error("Error translating vocabulary:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to translate vocabulary"
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
