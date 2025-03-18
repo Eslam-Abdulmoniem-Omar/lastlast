@@ -606,37 +606,19 @@ Return the response in exactly the same format, just with improved text.`,
 
   const handleTranslateVocabulary = async (segmentId: string, word: string) => {
     try {
-      setIsLoading(true);
+      setIsProcessing(true);
       setError(null);
 
-      // Create the messages array for OpenAI
-      const messages = [
-        {
-          role: "system",
-          content: `You are a helpful assistant that translates vocabulary. Your task is to:
-1. Translate the given word to English
-2. Provide a simple example sentence using the word
-3. Return the response in JSON format
-
-Example response format:
-{
-  "translation": "translated word",
-  "example": "example sentence"
-}`,
-        },
-        {
-          role: "user",
-          content: `Translate this word: ${word}`,
-        },
-      ];
-
-      console.log("Sending translation request to OpenAI...");
-      const response = await fetch("/api/openai/chat", {
+      const response = await fetch("/api/openai/translate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({
+          word,
+          context: dialogueSegments.find((s) => s.id === segmentId)?.text || "",
+          isFullSentence: false,
+        }),
       });
 
       if (!response.ok) {
@@ -645,51 +627,37 @@ Example response format:
       }
 
       const data = await response.json();
-      console.log("Received OpenAI response:", data);
 
-      // Parse the response content as JSON
-      let translationData;
-      try {
-        translationData = JSON.parse(data.content);
-        if (!translationData.translation || !translationData.example) {
-          throw new Error("Invalid translation response format");
-        }
-      } catch (parseError) {
-        console.error("Failed to parse OpenAI response as JSON:", parseError);
-        throw new Error("Invalid translation response format");
-      }
-
-      // Update the vocabulary item in the segment
+      // Update the segment with the translation
       setDialogueSegments((prevSegments) =>
-        prevSegments.map((segment) => {
-          if (segment.id === segmentId) {
-            return {
-              ...segment,
-              vocabularyItems: segment.vocabularyItems.map((item) =>
-                item.word === word
-                  ? {
-                      ...item,
-                      translation: translationData.translation,
-                      example: translationData.example,
-                    }
-                  : item
-              ),
-            };
-          }
-          return segment;
-        })
+        prevSegments.map((segment) =>
+          segment.id === segmentId
+            ? {
+                ...segment,
+                vocabularyItems: [
+                  ...segment.vocabularyItems,
+                  {
+                    word,
+                    translation: data.contextual_translation.translation,
+                    example: data.additional_example.english,
+                    explanation: data.meaning_comparison,
+                  },
+                ],
+              }
+            : segment
+        )
       );
 
       toast.success("Translation added successfully!");
     } catch (error) {
-      console.error("Error translating vocabulary:", error);
+      console.error("Translation error:", error);
       toast.error(
         error instanceof Error
           ? error.message
           : "Failed to translate vocabulary"
       );
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 

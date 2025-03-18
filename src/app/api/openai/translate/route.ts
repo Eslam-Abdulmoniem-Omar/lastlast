@@ -155,6 +155,15 @@ export async function POST(req: NextRequest) {
   try {
     console.log("🔹 OpenAI Translation API route called");
 
+    // Check if API key is configured
+    if (!isApiKeyConfigured()) {
+      console.warn("⚠️ API key not configured, using fallback translation.");
+      return NextResponse.json(
+        { error: "OpenAI API key is not configured" },
+        { status: 500 }
+      );
+    }
+
     // Extract request data
     const { word, context, isFullSentence = false } = await req.json();
     const textToTranslate = word?.trim();
@@ -171,14 +180,6 @@ export async function POST(req: NextRequest) {
         isFullSentence ? "sentence" : "word"
       }: "${textToTranslate}"`
     );
-
-    // Check API key configuration
-    if (!isApiKeyConfigured()) {
-      console.warn("⚠️ API key not configured, using fallback translation.");
-      return NextResponse.json(
-        getFallbackTranslation(textToTranslate, context, isFullSentence)
-      );
-    }
 
     let prompt = isFullSentence
       ? `
@@ -215,47 +216,55 @@ IMPORTANT:
         messages: [
           {
             role: "system",
-            content:
-              "You are a professional translator specializing in English to Arabic translations, with expertise in idioms, phrases, and contextual meanings. IMPORTANT: When providing translations, always keep English words and phrases that appear in single quotes (') or double quotes (\") in their original English form. Never translate these quoted terms to Arabic, as they are meant to be recognized as English terms in the translation.",
+            content: `You are a helpful assistant that translates English text to Arabic. Your task is to:
+            1. Translate the given text accurately and naturally
+            2. Preserve any idioms, phrasal verbs, or expressions in their proper context
+            3. Return the translation in a structured JSON format with:
+               - translation: the Arabic translation
+               - example: a simple example sentence using the word
+            4. Keep any quoted terms (") in their original English form`,
           },
           {
             role: "user",
             content: prompt,
           },
         ],
-        temperature: 0.3, // Keeps translations more accurate
+        temperature: 0.3,
+        max_tokens: 1000,
         response_format: { type: "json_object" },
       });
 
-      console.log("✅ OpenAI Translation response received");
-
-      const content = response.choices[0]?.message?.content;
-
-      if (!content) {
-        throw new Error("⚠️ Empty response from OpenAI");
+      if (!response.choices || response.choices.length === 0) {
+        throw new Error("No response received from OpenAI");
       }
 
+      const responseContent = response.choices[0].message.content;
+      if (!responseContent) {
+        throw new Error("Empty response received from OpenAI");
+      }
+
+      // Parse the JSON response
       try {
-        // Parse JSON response
-        return NextResponse.json(JSON.parse(content));
-      } catch (parseError) {
-        console.error("❌ Error parsing OpenAI response:", parseError);
-        console.warn("⚠️ Falling back to manual translation.");
+        const parsedResponse = JSON.parse(responseContent);
+        return NextResponse.json(parsedResponse);
+      } catch (error) {
+        console.error("Failed to parse translation response:", error);
         return NextResponse.json(
-          getFallbackTranslation(textToTranslate, context, isFullSentence)
+          { error: "Failed to parse translation response" },
+          { status: 500 }
         );
       }
-    } catch (apiError) {
-      console.error("❌ OpenAI API call failed:", apiError);
-      console.warn("⚠️ Using fallback translation due to API failure.");
+    } catch (error) {
+      console.error("Translation error:", error);
       return NextResponse.json(
-        getFallbackTranslation(textToTranslate, context, isFullSentence)
+        { error: "Failed to translate text" },
+        { status: 500 }
       );
     }
   } catch (error) {
-    console.error("❌ Unexpected server error:", error);
+    console.error("Translation error:", error);
     return NextResponse.json(
-      { error: "An internal error occurred. Please try again later." },
+      { error: "Failed to translate text" },
       { status: 500 }
     );
   }
