@@ -41,7 +41,18 @@ const nextConfig = {
     RAPIDAPI_KEY: process.env.RAPIDAPI_KEY,
   },
   // Increase the memory limit for the build process
-  transpilePackages: ["@ai-sdk/anthropic", "@ai-sdk/openai"],
+  transpilePackages: ["@ai-sdk/anthropic", "@ai-sdk/openai", "undici"],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;

@@ -8,7 +8,9 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   experimental: {
-    serverActions: true,
+    serverActions: {
+      allowedOrigins: ["*"],
+    },
   },
   // Optimize bundle size
   webpack: (config, { dev, isServer }) => {
