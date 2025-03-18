@@ -3,7 +3,6 @@
 const nextConfig = {
   output: "standalone", // Optimizes for deployment
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     domains: [
       "images.unsplash.com",
