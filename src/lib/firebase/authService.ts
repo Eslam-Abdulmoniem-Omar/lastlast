@@ -1,19 +1,10 @@
-import firebase from './firebase';
-import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  User,
-  browserPopupRedirectResolver,
-  signInWithRedirect,
-  getRedirectResult,
-} from "firebase/auth";
+import firebase from "./firebase";
+import { auth, db } from "./firebase";
 import { toast } from "react-hot-toast";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
 
 // Sign in with Google
-export const signInWithGoogle = async (): Promise<User | null> => {
-  const provider = new GoogleAuthProvider();
+export const signInWithGoogle = async (): Promise<any> => {
+  const provider = new firebase.auth.GoogleAuthProvider();
   provider.addScope("email");
   provider.addScope("profile");
 
@@ -45,15 +36,15 @@ export const logoutUser = async (): Promise<void> => {
 };
 
 // Get current user
-export const getCurrentUser = (): User | null => {
+export const getCurrentUser = () => {
   return auth.currentUser;
 };
 
 // Save user data to Firestore
-const saveUserToFirestore = async (user: User): Promise<void> => {
+const saveUserToFirestore = async (user: any): Promise<void> => {
   if (!user.email) return;
 
-  const userRef = db.collection('users').doc(user.uid);
+  const userRef = db.collection("users").doc(user.uid);
 
   try {
     const doc = await userRef.get();
@@ -81,7 +72,7 @@ const saveUserToFirestore = async (user: User): Promise<void> => {
 export const signInWithEmail = async (
   email: string,
   password: string
-): Promise<User | null> => {
+): Promise<any> => {
   try {
     const result = await auth.signInWithEmailAndPassword(email, password);
     toast.success("Successfully signed in!");
@@ -98,7 +89,7 @@ export const signUpWithEmail = async (
   email: string,
   password: string,
   displayName: string
-): Promise<User | null> => {
+): Promise<any> => {
   try {
     const result = await auth.createUserWithEmailAndPassword(email, password);
     const user = result.user;
@@ -140,7 +131,9 @@ const handleAuthError = (error: any) => {
       toast.error("Sign-in was cancelled");
       break;
     case "auth/popup-blocked":
-      toast.error("Pop-up was blocked by your browser. Please allow pop-ups for this site.");
+      toast.error(
+        "Pop-up was blocked by your browser. Please allow pop-ups for this site."
+      );
       break;
     case "auth/unauthorized-domain":
       toast.error("This domain is not authorized for Firebase authentication.");
@@ -150,7 +143,9 @@ const handleAuthError = (error: any) => {
       toast.error("Invalid email or password. Please try again.");
       break;
     case "auth/too-many-requests":
-      toast.error("Too many failed attempts. Please try again later or reset your password.");
+      toast.error(
+        "Too many failed attempts. Please try again later or reset your password."
+      );
       break;
     case "auth/email-already-in-use":
       toast.error("Email already in use. Try signing in instead.");
@@ -171,12 +166,12 @@ const handleAuthError = (error: any) => {
 
 // Sign in with Google using redirect (as fallback)
 export const signInWithGoogleRedirect = async (): Promise<void> => {
-  const provider = new GoogleAuthProvider();
+  const provider = new firebase.auth.GoogleAuthProvider();
   provider.addScope("email");
   provider.addScope("profile");
 
   try {
-    await signInWithRedirect(auth, provider);
+    await auth.signInWithRedirect(provider);
     // The user will be redirected to Google's authorization page
     // After authentication, they'll be redirected back to your app
     // Handle the redirect result in your AuthContext useEffect
@@ -187,27 +182,18 @@ export const signInWithGoogleRedirect = async (): Promise<void> => {
 };
 
 // Function to handle redirect result - should be called on page load
-export const handleRedirectResult = async (): Promise<User | null> => {
+export const handleRedirectResult = async (): Promise<any> => {
   try {
-    const result = await getRedirectResult(auth);
-    if (result) {
-      // User successfully authenticated
-      const user = result.user;
-      await saveUserToFirestore(user);
+    const result = await auth.getRedirectResult();
+    if (result && result.user) {
+      await saveUserToFirestore(result.user);
       toast.success("Successfully signed in with Google!");
-      return user;
+      return result.user;
     }
     return null;
   } catch (error: any) {
     console.error("Error handling redirect result:", error);
-    if (error.code === "auth/unauthorized-domain") {
-      toast.error("This domain is not authorized for Firebase authentication.");
-      console.error("Unauthorized domain:", window.location.origin);
-    } else if (error.code) {
-      toast.error(`Authentication error: ${error.code}`);
-    } else {
-      toast.error("Failed to complete authentication");
-    }
+    handleAuthError(error);
     return null;
   }
 };
