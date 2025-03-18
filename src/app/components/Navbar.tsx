@@ -108,11 +108,11 @@ export default function Navbar() {
                     href="/dashboard"
                     className="flex items-center text-sm font-medium text-white hover:text-white/90"
                   >
-                    {user.profilePicture && !profileImageError ? (
+                    {user.photoURL && !profileImageError ? (
                       <div className="relative w-8 h-8 mr-2 ring-2 ring-white/30 rounded-full">
                         <Image
-                          src={user.profilePicture}
-                          alt={user.name || "User"}
+                          src={user.photoURL}
+                          alt={user.displayName || "User"}
                           fill
                           className="rounded-full object-cover"
                           onError={() => setProfileImageError(true)}
@@ -123,7 +123,7 @@ export default function Navbar() {
                     ) : (
                       <FiUser className="mr-2 text-white" />
                     )}
-                    {user.name?.split(" ")[0] || "Profile"}
+                    {user.displayName?.split(" ")[0] || "Profile"}
                   </Link>
                 ) : (
                   <>
@@ -192,11 +192,11 @@ export default function Navbar() {
             <div className="pt-4 pb-3 border-t border-indigo-700/50">
               {user ? (
                 <div className="flex items-center px-3">
-                  {user.profilePicture && !profileImageError ? (
+                  {user.photoURL && !profileImageError ? (
                     <div className="relative w-10 h-10 mr-3 ring-2 ring-white/20 rounded-full">
                       <Image
-                        src={user.profilePicture}
-                        alt={user.name || "User"}
+                        src={user.photoURL}
+                        alt={user.displayName || "User"}
                         fill
                         className="rounded-full object-cover"
                         onError={() => setProfileImageError(true)}
@@ -211,7 +211,7 @@ export default function Navbar() {
                   )}
                   <div>
                     <div className="text-base font-medium text-white">
-                      {user.name || "User"}
+                      {user.displayName || "User"}
                     </div>
                     <div className="text-sm font-medium text-indigo-200">
                       {user.email}

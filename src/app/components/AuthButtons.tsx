@@ -60,10 +60,10 @@ export default function AuthButtons() {
       <div className="flex flex-col items-center gap-4 p-4 bg-white rounded-lg shadow-md">
         <div className="text-center">
           <p className="font-medium">Signed in as:</p>
-          <p className="text-gray-600">{user.name || user.email}</p>
-          {user.profilePicture && (
+          <p className="text-gray-600">{user.displayName || user.email}</p>
+          {user.photoURL && (
             <img
-              src={user.profilePicture}
+              src={user.photoURL}
               alt="Profile"
               className="w-10 h-10 rounded-full mx-auto mt-2"
             />

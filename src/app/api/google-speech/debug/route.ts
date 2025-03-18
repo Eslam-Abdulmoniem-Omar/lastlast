@@ -36,47 +36,6 @@ function findCredentialsFile() {
   return null;
 }
 
-interface CredentialsInfo {
-  credentialsFileExists: boolean;
-  credentialsPathFound: string | null;
-  checkedPaths: string[];
-  credentialsEnvVarSet: boolean;
-  credentialsEnvPath: string;
-  parsedCredentialsValid: boolean;
-  projectId: string;
-  clientEmail: string;
-  privateKeyExists: boolean;
-  parseError?: string | undefined;
-  tempCredentialsSet?: boolean;
-}
-
-interface ResponseType {
-  success: boolean;
-  environment: {
-    nodeVersion: string;
-    nodeEnv: string | undefined;
-    platform: NodeJS.Platform;
-    arch: string;
-  };
-  credentials: CredentialsInfo;
-  speechClient: {
-    initialized: boolean;
-    error: null | {
-      message: string;
-      stack?: string;
-    };
-    keyFileError?: string;
-  };
-  test: {
-    completed: boolean;
-    result: string | null;
-    error: null | {
-      message: string;
-      stack?: string;
-    };
-  };
-}
-
 export async function GET() {
   try {
     // Check Node.js version
@@ -91,7 +50,7 @@ export async function GET() {
     const hasCredentialsEnvVar = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
     // Initialize response object
-    const response: ResponseType = {
+    const response = {
       success: false,
       environment: {
         nodeVersion,
@@ -106,11 +65,6 @@ export async function GET() {
         credentialsEnvVarSet: hasCredentialsEnvVar,
         credentialsEnvPath:
           process.env.GOOGLE_APPLICATION_CREDENTIALS || "Not set",
-        parsedCredentialsValid: false,
-        projectId: "",
-        clientEmail: "",
-        privateKeyExists: false,
-        parseError: undefined,
       },
       speechClient: {
         initialized: false,
@@ -151,7 +105,7 @@ export async function GET() {
       let speechClient;
       try {
         speechClient = new SpeechClient({
-          keyFilename: credentialsPath || undefined,
+          keyFilename: credentialsPath,
         });
       } catch (keyFileError) {
         response.speechClient.keyFileError = (keyFileError as Error).message;
@@ -162,27 +116,11 @@ export async function GET() {
       response.speechClient.initialized = true;
 
       // Test the client with a basic API call
-      try {
-        const [result] = await speechClient.recognize({
-          config: {
-            encoding: "LINEAR16",
-            sampleRateHertz: 16000,
-            languageCode: "en-US",
-          },
-          audio: {
-            content: Buffer.from("").toString("base64"),
-          },
-        });
-        response.test.completed = true;
-        response.test.result =
-          "Successfully connected to Google Cloud Speech API";
-        response.success = true;
-      } catch (testError) {
-        response.test.error = {
-          message: (testError as Error).message,
-          stack: (testError as Error).stack,
-        };
-      }
+      const [operations] = await speechClient.listOperations({});
+      response.test.completed = true;
+      response.test.result =
+        "Successfully connected to Google Cloud Speech API";
+      response.success = true;
     } catch (clientError) {
       response.speechClient.error = {
         message: (clientError as Error).message,

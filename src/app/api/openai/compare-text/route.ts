@@ -95,11 +95,7 @@ Only respond with valid JSON.`,
     });
 
     // Parse the response
-    const content = response.choices[0].message.content;
-    if (!content) {
-      throw new Error("No content in OpenAI response");
-    }
-    const result = JSON.parse(content);
+    const result = JSON.parse(response.choices[0].message.content);
 
     // Remove log that exposes result data
     // console.log("Comparison result:", result);

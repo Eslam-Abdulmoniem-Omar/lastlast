@@ -32,20 +32,24 @@ export default function AuthTestPage() {
                   </p>
                   <div className="bg-white/10 p-4 rounded-lg">
                     <p>
-                      <span className="font-medium">User ID:</span> {user.id}
+                      <span className="font-medium">User ID:</span> {user.uid}
                     </p>
                     <p>
                       <span className="font-medium">Email:</span> {user.email}
                     </p>
                     <p>
-                      <span className="font-medium">Name:</span>{" "}
-                      {user.name || "Not set"}
+                      <span className="font-medium">Display Name:</span>{" "}
+                      {user.displayName || "Not set"}
                     </p>
-                    {user.profilePicture && (
+                    <p>
+                      <span className="font-medium">Email Verified:</span>{" "}
+                      {user.emailVerified ? "Yes" : "No"}
+                    </p>
+                    {user.photoURL && (
                       <div className="mt-2">
                         <p className="font-medium mb-1">Profile Photo:</p>
                         <img
-                          src={user.profilePicture}
+                          src={user.photoURL}
                           alt="Profile"
                           className="w-16 h-16 rounded-full border-2 border-white/30"
                         />

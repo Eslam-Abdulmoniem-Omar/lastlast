@@ -41,13 +41,10 @@ export async function getPodcasts(level?: string, limitCount = 10) {
     }
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => {
-      const data = doc.data() as Omit<Podcast, "id">;
-      return {
-        id: doc.id,
-        ...data,
-      } as Podcast;
-    });
+    return querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Podcast[];
   } catch (error) {
     console.error("Error getting podcasts:", error);
     throw error;
@@ -60,10 +57,9 @@ export async function getPodcastById(podcastId: string) {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      const data = docSnap.data() as Omit<Podcast, "id">;
       return {
         id: docSnap.id,
-        ...data,
+        ...docSnap.data(),
       } as Podcast;
     } else {
       throw new Error("Podcast not found");
@@ -133,10 +129,9 @@ export async function getUserProgress(userId: string, podcastId: string) {
       return null;
     }
 
-    const data = querySnapshot.docs[0].data() as Omit<UserProgress, "id">;
     return {
       id: querySnapshot.docs[0].id,
-      ...data,
+      ...querySnapshot.docs[0].data(),
     } as UserProgress & { id: string };
   } catch (error) {
     console.error("Error getting user progress:", error);

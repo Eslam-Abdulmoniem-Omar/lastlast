@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useEffect, useState } from "react";
-import { User as FirebaseUser } from "firebase/auth";
+import { User } from "firebase/auth";
 import { auth } from "../firebase/firebase";
 import { toast } from "react-hot-toast";
 import {
@@ -9,7 +9,6 @@ import {
   logoutUser,
   handleRedirectResult,
 } from "../firebase/authService";
-import { User } from "../types";
 
 interface AuthContextType {
   user: User | null;
@@ -18,7 +17,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-export const AuthContext = createContext<AuthContextType>({
+const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signInWithGoogle: async () => null,
@@ -28,73 +27,86 @@ export const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  // Handle redirect result on initial load
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const checkRedirectResult = async () => {
+        try {
+          const redirectUser = await handleRedirectResult();
+          if (redirectUser) {
+            console.log("User signed in via redirect:", redirectUser);
+          }
+        } catch (error) {
+          console.error("Error handling redirect result:", error);
+        }
+      };
+
+      checkRedirectResult();
+    }
+  }, []);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-      if (firebaseUser) {
-        // Convert Firebase user to our custom User type
-        const customUser: User = {
-          id: firebaseUser.uid,
-          email: firebaseUser.email || "",
-          name: firebaseUser.displayName || "",
-          profilePicture: firebaseUser.photoURL || undefined,
-        };
-        setUser(customUser);
-      } else {
-        setUser(null);
+    // Set a timeout to prevent indefinite loading state
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("Auth state loading timed out after 5 seconds");
+        setLoading(false);
       }
+    }, 5000);
+
+    // Only set up the auth listener if auth is not null
+    if (!auth) {
+      console.error(
+        "Auth object is null, Firebase may not be initialized correctly"
+      );
       setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const handleSignInWithGoogle = async () => {
-    try {
-      const firebaseUser = await signInWithGoogle();
-      if (firebaseUser) {
-        const customUser: User = {
-          id: firebaseUser.uid,
-          email: firebaseUser.email || "",
-          name: firebaseUser.displayName || "",
-          profilePicture: firebaseUser.photoURL || undefined,
-        };
-        setUser(customUser);
-        return customUser;
-      }
-      return null;
-    } catch (error) {
-      console.error("Error signing in with Google:", error);
-      toast.error("Failed to sign in with Google");
-      return null;
+      clearTimeout(loadingTimeout);
+      return;
     }
-  };
 
-  const handleSignOut = async () => {
     try {
-      await logoutUser();
-      setUser(null);
-      toast.success("Signed out successfully");
-    } catch (error) {
-      console.error("Error signing out:", error);
-      toast.error("Failed to sign out");
-    }
-  };
+      const unsubscribe = auth.onAuthStateChanged(
+        (user) => {
+          setUser(user);
+          setLoading(false);
+          setAuthInitialized(true);
+          clearTimeout(loadingTimeout);
+        },
+        (error) => {
+          console.error("Auth state change error:", error);
+          setLoading(false);
+          clearTimeout(loadingTimeout);
+        }
+      );
 
-  useEffect(() => {
-    handleRedirectResult();
-  }, []);
+      return () => {
+        unsubscribe();
+        clearTimeout(loadingTimeout);
+      };
+    } catch (error) {
+      console.error("Error setting up auth state listener:", error);
+      setLoading(false);
+      clearTimeout(loadingTimeout);
+      return () => {
+        clearTimeout(loadingTimeout);
+      };
+    }
+  }, [loading]);
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        loading,
-        signInWithGoogle: handleSignInWithGoogle,
-        signOut: handleSignOut,
+        loading: loading && !authInitialized,
+        signInWithGoogle,
+        signOut: logoutUser,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
+
+export { AuthContext };

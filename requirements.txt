@@ -1,8 +1,5 @@
-setuptools==65.5.1
-wheel==0.38.0
-pip==23.0.1
-yt-dlp==2024.03.10
-python-dotenv==1.0.0
-requests==2.31.0
-flask==2.3.3
-youtube-transcript-api==0.6.1 
+yt-dlp>=2024.03.10
+python-dotenv>=1.0.0
+requests>=2.31.0
+flask>=2.3.3
+youtube-transcript-api>=0.6.1 

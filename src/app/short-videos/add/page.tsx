@@ -78,74 +78,178 @@ function AddYouTubeShortPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [practiceStarted, setPracticeStarted] = useState(false);
-  const [isPublic, setIsPublic] = useState(false);
 
-  const handleVideoUrlChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const url = e.target.value;
-    setYoutubeUrl(url);
-
-    if (validateYoutubeUrl(url)) {
-      try {
-        // Just convert to embed URL without API call
-        const embed = convertToEmbedUrl(url);
-        setEmbedUrl(embed);
-        setError(null);
-
-        // Automatically fetch transcript when a valid URL is entered
-        fetchTranscript(url);
-      } catch (error) {
-        console.error("Error processing URL:", error);
-        setError("Invalid YouTube URL format");
-        setEmbedUrl("");
-      }
-    } else if (validateTikTokUrl(url)) {
-      try {
-        // For TikTok, the embed URL is the same as the original URL
-        setEmbedUrl(url);
-        setError(null);
-
-        // Fetch transcript for TikTok
-        fetchTranscript(url);
-      } catch (error) {
-        console.error("Error processing URL:", error);
-        setError("Invalid TikTok URL format");
-        setEmbedUrl("");
-      }
-    } else {
-      setEmbedUrl("");
-    }
-  };
-
-  const fetchTranscript = useCallback(async (url: string) => {
+  const handleVideoUrlChange = async (url: string) => {
     try {
       setIsLoading(true);
-      const response = await fetch(
-        `/api/youtube/metadata?url=${encodeURIComponent(url)}`
+        setError(null);
+
+      // First try to get the transcript using RapidAPI
+      const rapidApiResponse = await fetch(
+        `http://localhost:3001/api/youtube/rapidapi-transcript?url=${encodeURIComponent(
+          url
+        )}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+        }
       );
-      const data = await response.json();
 
-      if (data.error) {
-        toast.error(data.error);
-        return;
+      if (!rapidApiResponse.ok) {
+        console.error("RapidAPI request failed:", {
+          status: rapidApiResponse.status,
+          statusText: rapidApiResponse.statusText,
+        });
+        throw new Error(`RapidAPI request failed: ${rapidApiResponse.status}`);
       }
 
-      if (data.data.segments) {
-        setDialogueSegments(data.data.segments);
+      const transcriptData = await rapidApiResponse.json();
+      console.log("Received transcript data:", transcriptData);
+
+      if (!transcriptData.data || !transcriptData.data.segments) {
+        throw new Error("Invalid transcript data format");
       }
-    } catch (error) {
+
+      // Process transcript in chunks
+      const processedSegments = await processTranscriptInChunks(
+        transcriptData.data.segments
+      );
+
+      setTranscriptData({
+        ...transcriptData.data,
+        segments: processedSegments,
+      });
+      setVideoUrl(url);
+      } catch (error) {
       console.error("Error fetching transcript:", error);
-      toast.error("Failed to fetch transcript");
+      setError(
+        error instanceof Error ? error.message : "Failed to fetch transcript"
+      );
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
+
+  // Add this function to handle large responses
+  async function processTranscriptInChunks(segments: DialogueSegment[]) {
+    const CHUNK_SIZE = 50;
+    const chunks = [];
+
+    for (let i = 0; i < segments.length; i += CHUNK_SIZE) {
+      chunks.push(segments.slice(i, i + CHUNK_SIZE));
+    }
+
+    const processedChunks = [];
+    for (const chunk of chunks) {
+      const processedChunk = await processSegmentsWithOpenAI(chunk);
+      processedChunks.push(...processedChunk);
+    }
+
+    return processedChunks;
+  }
+
+  // Function to process segments with OpenAI
+  const processSegmentsWithOpenAI = async (segments: DialogueSegment[]) => {
+    try {
+      // Prepare the text for OpenAI
+      const text = segments
+        .map((segment) => `${segment.speakerName}: ${segment.text}`)
+        .join("\n");
+
+      // Create the messages array for OpenAI
+      const messages = [
+        {
+          role: "system",
+          content: `You are a helpful assistant that processes dialogue segments. Your task is to:
+1. Keep the same speaker names and timing
+2. Improve the text to be more natural and fluent
+3. Maintain the same meaning and context
+4. Return the response in the exact same JSON format as the input
+
+Input format example:
+[
+  {
+    "speakerName": "Speaker A",
+    "text": "Original text here",
+    "startTime": 0,
+    "endTime": 5
+  }
+]
+
+Return the response in exactly the same format, just with improved text.`,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ];
+
+      console.log("Sending request to OpenAI...");
+      const response = await fetch("/api/openai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process with OpenAI");
+      }
+
+      // Get the response data
+      const processedSegments = await response.json();
+      console.log("Received OpenAI response:", processedSegments);
+
+      // Validate the response format
+      if (!Array.isArray(processedSegments)) {
+        throw new Error("OpenAI response is not an array");
+      }
+
+      // Map the processed segments back to the original timing
+      return processedSegments.map((segment: any, index: number) => ({
+        ...segment,
+        startTime: segments[index].startTime,
+        endTime: segments[index].endTime,
+        speakerName: segments[index].speakerName, // Keep original speaker names
+      }));
+    } catch (error) {
+      console.error("Error processing segments with OpenAI:", error);
+      throw error;
+    }
+  };
+
+  // Function to handle speech recognition
+  const handleSpeechRecognition = async (audioBlob: Blob) => {
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob);
+
+      const response = await fetch("/api/speech-to-text", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to process speech");
+      }
+
+      const data = await response.json();
+      return data.transcript;
+    } catch (error) {
+      console.error("Error in speech recognition:", error);
+      throw error;
+    }
+  };
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
 
+      // Validate YouTube URL
       if (!youtubeUrl) {
         toast.error("Please enter a YouTube URL");
         return;
@@ -153,6 +257,33 @@ function AddYouTubeShortPage() {
 
       if (!validateYoutubeUrl(youtubeUrl)) {
         toast.error("Please enter a valid YouTube URL");
+        return;
+      }
+
+      // Validate title
+      if (!title.trim()) {
+        toast.error("Please enter a title for the video");
+        return;
+      }
+
+      // Validate dialogue segments
+      if (!dialogueSegments || dialogueSegments.length === 0) {
+        toast.error("Please add at least one dialogue segment");
+        return;
+      }
+
+      // Validate each segment
+      const invalidSegments = dialogueSegments.filter(
+        (segment) =>
+          !segment.text.trim() ||
+          segment.startTime < 0 ||
+          segment.endTime <= segment.startTime
+      );
+
+      if (invalidSegments.length > 0) {
+        toast.error(
+          "Please ensure all dialogue segments have valid text and timestamps"
+        );
         return;
       }
 
@@ -167,13 +298,15 @@ function AddYouTubeShortPage() {
         // Create the short video document
         const shortVideoRef = await addDoc(collection(db, "shortVideos"), {
           youtubeUrl,
-          userId: user.id,
+          embedUrl: convertToEmbedUrl(youtubeUrl),
+          userId: user.uid,
           createdAt: serverTimestamp(),
           topics: topics,
           dialogueSegments,
-          title: title || "Untitled",
-          description: description || "",
-          isPublic: isPublic || false,
+          title: title.trim(),
+          description: description.trim() || "",
+          level,
+          isPublic,
         });
 
         toast.success("Video added successfully!");
@@ -182,7 +315,7 @@ function AddYouTubeShortPage() {
         router.push(`/short-videos/${shortVideoRef.id}`);
       } catch (error) {
         console.error("Error adding video:", error);
-        toast.error("Failed to add video");
+        toast.error("Failed to add video. Please try again.");
       } finally {
         setIsSubmitting(false);
       }
@@ -194,8 +327,8 @@ function AddYouTubeShortPage() {
       dialogueSegments,
       title,
       description,
+      level,
       router,
-      isPublic,
     ]
   );
 
@@ -208,7 +341,7 @@ function AddYouTubeShortPage() {
         setYoutubeUrl(urlFromQuery);
         setIsAutoSubmitMode(true);
 
-        await fetchTranscript(urlFromQuery);
+        await handleVideoUrlChange(urlFromQuery);
 
         if (user) {
           setTimeout(() => {
@@ -219,7 +352,7 @@ function AddYouTubeShortPage() {
     };
 
     handleUrlFromQuery();
-  }, [user, router, isAutoSubmitMode, fetchTranscript, handleSubmit]);
+  }, [user, router, isAutoSubmitMode, handleVideoUrlChange, handleSubmit]);
 
   const addTopic = () => {
     if (newTopic.trim() && !topics.includes(newTopic.trim())) {
@@ -311,14 +444,14 @@ function AddYouTubeShortPage() {
             id="youtubeUrl"
             type="text"
             value={youtubeUrl}
-            onChange={handleVideoUrlChange}
+            onChange={(e) => setYoutubeUrl(e.target.value)}
             placeholder="Enter YouTube or TikTok URL..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             required
           />
           <button
             type="button"
-            onClick={() => fetchTranscript(youtubeUrl)}
+            onClick={() => handleVideoUrlChange(youtubeUrl)}
             disabled={isLoading || !validateYoutubeUrl(youtubeUrl)}
             className={`bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 flex items-center ${
               isLoading || !validateYoutubeUrl(youtubeUrl)

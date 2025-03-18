@@ -1,44 +1,19 @@
 [build]
-  command = "npm install --legacy-peer-deps && npm run build"
-  publish = "build"
+  command = "npm run build"
+  publish = ".next"
 
 [build.environment]
-  NEXT_TELEMETRY_DISABLED = "1"
-  NODE_VERSION = "18.17.0"
-  PYTHON_VERSION = "3.8"
-  NPM_FLAGS = "--legacy-peer-deps --max-old-space-size=4096"
-  NODE_OPTIONS = "--max_old_space_size=4096"
+  NODE_VERSION = "18.19.0"
+  NPM_FLAGS = "--legacy-peer-deps"
 
 [build.processing]
-  skip_processing = false
-
-[build.processing.css]
-  bundle = true
-  minify = true
-
-[build.processing.js]
-  bundle = true
-  minify = true
-
-[build.processing.html]
-  pretty_urls = true
-
-[build.processing.images]
-  compress = true
+  skip_processing = true
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[functions]
-  included_files = ["node_modules/@netlify/plugin-nextjs/**/*"]
-
-# These redirects ensure that all routes work with the Next.js router
-[[redirects]]
-  from = "/_next/static/*"
-  to = "/static/:splat"
-  status = 200
-
+# Handle custom 404 page
 [[redirects]]
   from = "/*"
-  to = "/.netlify/functions/next_handler"
-  status = 200 
+  to = "/404"
+  status = 404 

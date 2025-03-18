@@ -272,7 +272,7 @@ export default function TimestampedYouTubePlayer({
 
     // Update progress when user watches the video
     if (user && event.data === YT.PlayerState.PLAYING) {
-      updateListeningProgress(user.id, podcast.id).catch((error) =>
+      updateListeningProgress(user.uid, podcast.id).catch((error) =>
         console.error("Error updating listening progress:", error)
       );
     }
@@ -701,7 +701,7 @@ export default function TimestampedYouTubePlayer({
   const getCommonWordsFromDialogue = (): string[] => {
     // Extract some common words from the dialogue lines
     const allText = dialogueLines.map((line) => line.text).join(" ");
-    const words: string[] = allText.toLowerCase().match(/\b\w+\b/g) || [];
+    const words = allText.toLowerCase().match(/\b\w+\b/g) || [];
 
     // Filter out common words and get unique ones
     const commonWords = words

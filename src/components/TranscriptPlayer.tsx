@@ -235,39 +235,19 @@ export default function TranscriptPlayer({
     }, 100); // Update every 100ms
   };
 
-  const startTimeTracking = () => {
-    if (timerRef) return;
-    const timer = setInterval(() => {
-      if (playerRef.current) {
-        setCurrentTime(playerRef.current.getCurrentTime());
-      }
-    }, 100);
-    timerRef.current = timer;
-  };
-
-  const stopTimeTracking = () => {
-    if (timerRef) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
   const onPlayerStateChange = (event: YT.OnStateChangeEvent) => {
     if (event.data === YT.PlayerState.PLAYING) {
       setIsPlaying(true);
-      startTimeTracking();
-    } else if (event.data === YT.PlayerState.PAUSED) {
+    } else if (
+      event.data === YT.PlayerState.PAUSED ||
+      event.data === YT.PlayerState.ENDED
+    ) {
       setIsPlaying(false);
-      stopTimeTracking();
-    } else if (event.data === YT.PlayerState.ENDED) {
-      setIsPlaying(false);
-      stopTimeTracking();
-      onComplete?.();
     }
 
     // Update progress when user watches the video
     if (user && event.data === YT.PlayerState.PLAYING) {
-      updateListeningProgress(user.id, podcast.id).catch((error) =>
+      updateListeningProgress(user.uid, podcast.id).catch((error) =>
         console.error("Error updating listening progress:", error)
       );
     }
