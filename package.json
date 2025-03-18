@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.18.0",
     "@deepgram/sdk": "^3.1.6",
+    "@google-cloud/speech": "^7.0.0",
     "@headlessui/react": "^1.7.18",
     "@heroicons/react": "^2.1.1",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -31,6 +32,7 @@
     "lucide-react": "^0.344.0",
     "next": "14.1.0",
     "next-themes": "^0.2.1",
+    "openai": "^4.87.3",
     "postcss": "^8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

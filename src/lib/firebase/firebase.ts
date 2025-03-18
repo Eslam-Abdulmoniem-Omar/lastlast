@@ -1,7 +1,7 @@
-import firebase from "firebase/compat/app";
-import "firebase/compat/auth";
-import "firebase/compat/firestore";
-import "firebase/compat/storage";
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+import 'firebase/compat/storage';
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
@@ -15,11 +15,13 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = !firebase.apps.length
-  ? firebase.initializeApp(firebaseConfig)
-  : firebase.app();
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
+const app = firebase.app();
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
-export { app, auth, db, storage };
+export { app, auth, db, storage, firebase as default };
