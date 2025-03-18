@@ -48,9 +48,28 @@ const nextConfig = {
         fs: false,
         net: false,
         tls: false,
+        crypto: false,
+        stream: false,
+        http: false,
+        https: false,
+        zlib: false,
       };
     }
+
+    // Add a rule to handle the undici module
+    config.module.rules.push({
+      test: /node_modules\/undici\/.*\.js$/,
+      loader: "string-replace-loader",
+      options: {
+        search: /#target/g,
+        replace: "target",
+      },
+    });
+
     return config;
+  },
+  experimental: {
+    esmExternals: "loose", // Required for Firebase compat version
   },
 };
 
