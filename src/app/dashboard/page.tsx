@@ -52,7 +52,7 @@ function Dashboard() {
 
           {/* Main Content */}
           <div className="lg:col-span-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-6 mb-6">
               {/* Short Videos Container */}
               <Link
                 href="/short-videos"
@@ -71,26 +71,6 @@ function Dashboard() {
                   </p>
                   <div className="mt-auto inline-flex items-center justify-center px-5 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white font-medium group-hover:bg-white/20 transition-colors">
                     Browse Videos <FileText className="ml-2 h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-              {/* Add Short Videos Container */}
-              <Link
-                href="/short-videos/add"
-                className="bg-gradient-to-br from-purple-500 to-pink-600 text-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow group"
-              >
-                <div className="p-8 flex flex-col items-center text-center h-full">
-                  <div className="bg-white/20 p-4 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
-                    <Upload className="h-10 w-10 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold mb-3">Add New Video</h3>
-                  <p className="text-pink-100 mb-6">
-                    Upload and create new short videos for practice with
-                    AI-powered transcription
-                  </p>
-                  <div className="mt-auto inline-flex items-center justify-center px-5 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white font-medium group-hover:bg-white/20 transition-colors">
-                    Add Video <Plus className="ml-2 h-4 w-4" />
                   </div>
                 </div>
               </Link>
@@ -113,11 +93,10 @@ function Dashboard() {
                   <li>
                     Browse our library of short videos for language practice
                   </li>
-                  <li>Add your own videos with automatic transcription</li>
                   <li>Track your learning progress</li>
                 </ul>
                 <p className="text-gray-600">
-                  Click on one of the cards above to get started!
+                  Click on the card above to get started!
                 </p>
               </div>
             )}

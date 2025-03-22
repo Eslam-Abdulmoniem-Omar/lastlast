@@ -315,7 +315,7 @@ export default function Home() {
             fluency using our innovative platform.
           </p>
           <Link
-            href="#try-it"
+            href="/signup"
             className="bg-white text-green-700 hover:bg-green-50 px-10 py-4 rounded-lg font-medium text-lg inline-block"
           >
             Start Your Journey Today
