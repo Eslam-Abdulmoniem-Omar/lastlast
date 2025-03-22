@@ -42,14 +42,10 @@ export default function Navbar() {
 
   // Conditional navigation links based on auth state
   const navLinks = user
-    ? [
-        { name: "Dashboard", href: "/dashboard" },
-        { name: "Speech Test", href: "/direct-test" },
-      ]
+    ? [{ name: "Dashboard", href: "/dashboard" }]
     : [
         { name: "Home", href: "/" },
         { name: "Dashboard", href: "/dashboard" },
-        { name: "Speech Test", href: "/direct-test" },
       ];
 
   return (

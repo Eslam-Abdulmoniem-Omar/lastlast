@@ -155,16 +155,7 @@ export async function POST(req: NextRequest) {
   try {
     console.log("🔹 OpenAI Translation API route called");
 
-    // Check if API key is configured
-    if (!isApiKeyConfigured()) {
-      console.warn("⚠️ API key not configured, using fallback translation.");
-      return NextResponse.json(
-        { error: "OpenAI API key is not configured" },
-        { status: 500 }
-      );
-    }
-
-    // Extract request data
+    // Extract request data first to ensure we can provide fallbacks
     const { word, context, isFullSentence = false } = await req.json();
     const textToTranslate = word?.trim();
 
@@ -180,6 +171,15 @@ export async function POST(req: NextRequest) {
         isFullSentence ? "sentence" : "word"
       }: "${textToTranslate}"`
     );
+
+    // Check if API key is configured
+    if (!isApiKeyConfigured()) {
+      console.warn("⚠️ API key not configured, using fallback translation.");
+      // Always return a successful response with fallback data instead of an error
+      return NextResponse.json(
+        getFallbackTranslation(textToTranslate, context || "", isFullSentence)
+      );
+    }
 
     let prompt = isFullSentence
       ? `
@@ -235,37 +235,61 @@ IMPORTANT:
       });
 
       if (!response.choices || response.choices.length === 0) {
-        throw new Error("No response received from OpenAI");
+        console.error("No response received from OpenAI");
+        // Return fallback instead of error
+        return NextResponse.json(
+          getFallbackTranslation(textToTranslate, context || "", isFullSentence)
+        );
       }
 
       const responseContent = response.choices[0].message.content;
       if (!responseContent) {
-        throw new Error("Empty response received from OpenAI");
+        console.error("Empty response received from OpenAI");
+        // Return fallback instead of error
+        return NextResponse.json(
+          getFallbackTranslation(textToTranslate, context || "", isFullSentence)
+        );
       }
 
       // Parse the JSON response
       try {
         const parsedResponse = JSON.parse(responseContent);
         return NextResponse.json(parsedResponse);
-      } catch (error) {
-        console.error("Failed to parse translation response:", error);
+      } catch (parseError) {
+        console.error("Failed to parse OpenAI response:", parseError);
+        console.log("Raw response:", responseContent);
+        // Return fallback instead of error
         return NextResponse.json(
-          { error: "Failed to parse translation response" },
-          { status: 500 }
+          getFallbackTranslation(textToTranslate, context || "", isFullSentence)
         );
       }
-    } catch (error) {
-      console.error("Translation error:", error);
+    } catch (openaiError) {
+      console.error("OpenAI API error:", openaiError);
+      // Return fallback instead of error
       return NextResponse.json(
-        { error: "Failed to translate text" },
-        { status: 500 }
+        getFallbackTranslation(textToTranslate, context || "", isFullSentence)
       );
     }
   } catch (error) {
-    console.error("Translation error:", error);
+    console.error("General error in translation API:", error);
+    // Extract word and context if possible for fallback
+    let textToTranslate = "";
+    let contextText = "";
+    let isFullSentence = false;
+
+    try {
+      // Try to parse the request body to get fallback data
+      const reqBody = await req.json().catch(() => ({}));
+      textToTranslate = reqBody.word || "unknown";
+      contextText = reqBody.context || "";
+      isFullSentence = reqBody.isFullSentence || false;
+    } catch (e) {
+      console.error("Could not parse request body for fallback:", e);
+    }
+
+    // Always return a fallback response instead of an error
     return NextResponse.json(
-      { error: "Failed to translate text" },
-      { status: 500 }
+      getFallbackTranslation(textToTranslate, contextText, isFullSentence)
     );
   }
 }

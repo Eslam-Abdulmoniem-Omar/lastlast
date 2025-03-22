@@ -60,11 +60,11 @@ async function getTranscript(videoId: string): Promise<any> {
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
     const url = searchParams.get("url");
 
     if (!url) {
-      return NextResponse.json(
+    return NextResponse.json(
         { error: "URL parameter is required" },
         {
           status: 400,

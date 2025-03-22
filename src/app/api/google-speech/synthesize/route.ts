@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { SpeechClient } from "@google-cloud/speech";
+import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 
 // Initialize the client with credentials directly
-const speechClient = new SpeechClient({
+const ttsClient = new TextToSpeechClient({
   credentials: {
     type: "service_account",
     project_id: "metal-cascade-453903-i3",
@@ -20,94 +20,123 @@ const speechClient = new SpeechClient({
   },
 });
 
+// Test function to verify credentials
+async function testCredentials() {
+  try {
+    // Try to list available voices as a test
+    const [voices] = await ttsClient.listVoices({});
+    console.log("Successfully connected to Google Cloud TTS");
+    console.log("Available voices:", voices.voices?.length || 0);
+    return true;
+  } catch (error: any) {
+    console.error("Failed to connect to Google Cloud TTS:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      stack: error.stack,
+    });
+    return false;
+  }
+}
+
+// Add a GET endpoint to list available voices
+export async function GET() {
+  try {
+    const [voices] = await ttsClient.listVoices({});
+    return NextResponse.json({
+      success: true,
+      voices: voices.voices || [],
+    });
+  } catch (error: any) {
+    console.error("Error listing voices:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      stack: error.stack,
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to list voices",
+        details: error.message,
+        code: error.code,
+      },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const audioFile = formData.get("audio") as Blob;
-
-    if (!audioFile) {
+    // First test the credentials
+    const credentialsValid = await testCredentials();
+    if (!credentialsValid) {
       return NextResponse.json(
-        { error: "No audio file provided" },
-        { status: 400 }
+        {
+          success: false,
+          error: "Failed to connect to Google Cloud TTS",
+          details: "Please check your credentials",
+        },
+        { status: 500 }
       );
     }
 
-    // Log audio file details
-    console.log("Received audio file:", {
-      type: audioFile.type,
-      size: audioFile.size,
+    // Parse the request body
+    const body = await request.json();
+    const text = body.text;
+
+    if (!text) {
+      console.error("No text provided in request body");
+      return NextResponse.json({ error: "No text provided" }, { status: 400 });
+    }
+
+    console.log("Received text for TTS:", text);
+
+    // Set up the TTS request with simpler configuration
+    const ttsRequest = {
+      input: { text },
+      voice: {
+        languageCode: "en-US",
+        name: "en-US-Standard-A", // Using a standard voice instead of neural
+      },
+      audioConfig: {
+        audioEncoding: "MP3",
+      },
+    };
+
+    console.log("Sending request to Google Cloud TTS:", {
+      textLength: text.length,
+      voice: ttsRequest.voice.name,
+      languageCode: ttsRequest.voice.languageCode,
     });
 
-    // Convert blob to buffer
-      const arrayBuffer = await audioFile.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const audioContent = buffer.toString("base64");
-
-    // Create the request configuration
-    const config = {
-      encoding: "WEBM_OPUS",
-      sampleRateHertz: 48000,
-      languageCode: "en-US",
-      model: "default",
-      enableAutomaticPunctuation: true,
-      useEnhanced: true,
-    };
-
-    // Create the audio object
-    const audio = {
-      content: audioContent,
-    };
-
-    console.log(
-      "Sending request to Google Cloud Speech-to-Text API with config:",
-      {
-        encoding: config.encoding,
-        sampleRate: config.sampleRateHertz,
-        languageCode: config.languageCode,
-        model: config.model,
-      }
-    );
-
     try {
-      // Make the API call using the client library
-      const [response] = await speechClient.recognize({
-        config,
-        audio,
-      });
+      // Make the API call
+      const [response] = await ttsClient.synthesizeSpeech(ttsRequest);
+      const audioContent = response.audioContent;
 
-      console.log(
-        "Full Google Cloud response:",
-        JSON.stringify(response, null, 2)
-      );
-
-      if (!response.results || response.results.length === 0) {
-        console.log("No results in response");
+      if (!audioContent) {
+        console.error("No audio content received from Google Cloud TTS");
         return NextResponse.json(
           {
             success: false,
-            error: "No speech detected",
-            details: "The audio file was processed but no speech was detected",
+            error: "Failed to synthesize speech",
           },
-          { status: 400 }
+          { status: 500 }
         );
       }
 
-      // Format the response
-      const result = {
-        success: true,
-        transcript: response.results[0].alternatives[0].transcript || "",
-        confidence: response.results[0].alternatives[0].confidence || 0,
-        processingTimeMs: 0,
-        audioDetails: {
-          format: audioFile.type,
-          sizeBytes: audioFile.size,
-          filename: "recording.webm",
-        },
-      };
+      console.log("Successfully received audio content from Google Cloud TTS");
 
-      return NextResponse.json(result);
+      // Return the audio content as base64
+      return NextResponse.json({
+        success: true,
+        audioContent: Buffer.from(audioContent as Uint8Array).toString(
+          "base64"
+        ),
+      });
     } catch (apiError: any) {
-      console.error("Google Cloud API Error Details:", {
+      console.error("Google Cloud TTS API Error:", {
         message: apiError.message,
         code: apiError.code,
         details: apiError.details,
@@ -117,7 +146,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Google Cloud API Error",
+          error: "Google Cloud TTS API Error",
           details: apiError.message,
           code: apiError.code,
           timestamp: new Date().toISOString(),
@@ -126,15 +155,16 @@ export async function POST(request: Request) {
       );
     }
   } catch (error: any) {
-    console.error("General error details:", {
+    console.error("General error in text-to-speech endpoint:", {
       message: error.message,
       stack: error.stack,
+      type: error.constructor.name,
     });
 
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to process speech",
+        error: "Failed to process text-to-speech request",
         details: error.message,
         timestamp: new Date().toISOString(),
       },

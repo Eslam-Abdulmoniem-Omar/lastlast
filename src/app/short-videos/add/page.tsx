@@ -14,7 +14,10 @@ import {
   Headphones,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { createPodcastWithYouTube } from "@/lib/firebase/podcastUtils";
+import {
+  createPodcastWithYouTube,
+  saveVideoToCollection,
+} from "@/lib/firebase/podcastUtils";
 import { Podcast, DialogueSegment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "react-hot-toast";
@@ -81,6 +84,7 @@ function AddYouTubeShortPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [practiceStarted, setPracticeStarted] = useState(false);
+  const [savedVideos, setSavedVideos] = useState<Partial<Podcast>[]>([]);
 
   const fetchTranscript = useCallback(async (url: string) => {
     try {
@@ -379,7 +383,7 @@ Return the response in exactly the same format, just with improved text.`,
           title: title.trim(),
           description: description.trim() || "",
           level,
-          isPublic,
+          isPublic: true,
         });
 
         toast.success("Video added successfully!");
@@ -680,8 +684,8 @@ Return the response in exactly the same format, just with improved text.`,
                     Add YouTube Short Video
                   </h1>
                   <p className="text-gray-600">
-                    Add a YouTube video for speaking practice. You&apos;ll need
-                    to provide dialogue timestamps.
+                    Add a YouTube video for speaking practice and create
+                    detailed transcripts.
                   </p>
                 </div>
               </div>
@@ -723,7 +727,9 @@ Return the response in exactly the same format, just with improved text.`,
 
               <div className="space-y-8">
                 <div className="bg-white p-8 rounded-xl shadow-sm">
-                  <h2 className="text-2xl font-semibold mb-6">Video Details</h2>
+                  <h2 className="text-2xl font-semibold mb-6">
+                    Create Video Practice
+                  </h2>
 
                   {/* 2-column layout with wider YouTube component */}
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -740,7 +746,7 @@ Return the response in exactly the same format, just with improved text.`,
                             {validateYoutubeUrl(youtubeUrl) ? (
                               <iframe
                                 src={embedUrl}
-                                className="w-full h-full"
+                                className="w-full h-[30%]"
                                 title="YouTube video player"
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowFullScreen

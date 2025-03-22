@@ -44,14 +44,17 @@ export async function POST(request: Request) {
     const isTranscriptRequest = messages[0].content.includes(
       "You are a helpful assistant that processes dialogue segments"
     );
+    const isRoleplayRequest = messages[0].content.includes(
+      "a character in a roleplay conversation"
+    );
 
     // Configure request based on type
     const requestConfig = {
-      model: "gpt-3.5-turbo",
+      model: isRoleplayRequest ? "gpt-4o" : "gpt-3.5-turbo",
       messages: messages,
-      temperature: 0.7,
-      max_tokens: isVocabularyRequest ? 200 : 1000,
-      response_format: { type: "json_object" },
+      temperature: isRoleplayRequest ? 0.9 : 0.7,
+      max_tokens: isVocabularyRequest ? 200 : isRoleplayRequest ? 150 : 1000,
+      response_format: isRoleplayRequest ? undefined : { type: "json_object" },
     };
 
     // Make the OpenAI API request
@@ -79,6 +82,13 @@ export async function POST(request: Request) {
           { status: 500 }
         );
       }
+    }
+
+    // For roleplay requests, return the plain text response
+    if (isRoleplayRequest) {
+      return NextResponse.json({
+        text: completion.choices[0].message.content,
+      });
     }
 
     // For vocabulary requests, return the content directly
