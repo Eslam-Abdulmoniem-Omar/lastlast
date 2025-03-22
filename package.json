@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "SKIP_GOOGLE_APIS=true next build",
     "start": "next start",
     "start:prod": "NODE_ENV=production next start",
     "lint": "next lint",
