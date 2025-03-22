@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import GuidedSpeakingPractice from "../components/GuidedSpeakingPractice";
+import GuidedSpeakingPractice from "../../components/GuidedSpeakingPractice";
 
 export default function PracticePage() {
   // Example script - you can make this dynamic based on your needs
@@ -27,7 +27,7 @@ export default function PracticePage() {
             expectedScript={script}
             onTranscriptReceived={handleTranscriptReceived}
           />
-                </div>
+        </div>
 
         <div className="mt-8 bg-blue-50 rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-3">Tips:</h3>
