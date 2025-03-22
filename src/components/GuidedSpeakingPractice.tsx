@@ -34,6 +34,116 @@ interface CorrectionHighlight {
 // First, update the ResultType to include the error state
 type ResultType = "correct" | "incorrect" | "complete" | "error" | null;
 
+// Add these helper functions before the GuidedSpeakingPractice component
+interface WordVariation {
+  base: string;
+  variations: string[];
+}
+
+const COMMON_CONTRACTIONS: WordVariation[] = [
+  { base: "it is", variations: ["it's"] },
+  { base: "I am", variations: ["I'm"] },
+  { base: "you are", variations: ["you're"] },
+  { base: "they are", variations: ["they're"] },
+  { base: "we are", variations: ["we're"] },
+  { base: "who is", variations: ["who's"] },
+  { base: "what is", variations: ["what's"] },
+  { base: "where is", variations: ["where's"] },
+  { base: "when is", variations: ["when's"] },
+  { base: "how is", variations: ["how's"] },
+  { base: "that is", variations: ["that's"] },
+  { base: "there is", variations: ["there's"] },
+  { base: "he is", variations: ["he's"] },
+  { base: "she is", variations: ["she's"] },
+  { base: "will not", variations: ["won't"] },
+  { base: "cannot", variations: ["can't"] },
+  { base: "do not", variations: ["don't"] },
+  { base: "does not", variations: ["doesn't"] },
+  { base: "did not", variations: ["didn't"] },
+  { base: "has not", variations: ["hasn't"] },
+  { base: "have not", variations: ["haven't"] },
+  { base: "had not", variations: ["hadn't"] },
+  { base: "would not", variations: ["wouldn't"] },
+  { base: "could not", variations: ["couldn't"] },
+  { base: "should not", variations: ["shouldn't"] },
+  { base: "is not", variations: ["isn't"] },
+  { base: "was not", variations: ["wasn't"] },
+  { base: "were not", variations: ["weren't"] },
+  { base: "are not", variations: ["aren't"] },
+  { base: "I have", variations: ["I've"] },
+  { base: "you have", variations: ["you've"] },
+  { base: "they have", variations: ["they've"] },
+  { base: "we have", variations: ["we've"] },
+  { base: "would have", variations: ["would've"] },
+  { base: "could have", variations: ["could've"] },
+  { base: "should have", variations: ["should've"] },
+  { base: "must have", variations: ["must've"] },
+  { base: "I will", variations: ["I'll"] },
+  { base: "you will", variations: ["you'll"] },
+  { base: "he will", variations: ["he'll"] },
+  { base: "she will", variations: ["she'll"] },
+  { base: "it will", variations: ["it'll"] },
+  { base: "they will", variations: ["they'll"] },
+  { base: "we will", variations: ["we'll"] },
+];
+
+// Function to normalize and expand contractions
+const normalizeAndExpandContractions = (text: string): string[] => {
+  const words = text.toLowerCase().split(/\s+/);
+  const variations: string[][] = words.map((word) => {
+    // Find if this word is a contraction
+    const asContraction = COMMON_CONTRACTIONS.find(
+      (c) => c.variations.includes(word) || c.base.split(" ")[0] === word
+    );
+
+    if (asContraction) {
+      return [word, ...asContraction.variations, asContraction.base];
+    }
+    return [word];
+  });
+
+  // Generate all possible combinations
+  const combinations: string[] = variations.reduce(
+    (acc: string[], curr: string[]) => {
+      if (acc.length === 0) return curr;
+      const newCombos: string[] = [];
+      acc.forEach((a) => curr.forEach((c) => newCombos.push(`${a} ${c}`)));
+      return newCombos;
+    },
+    []
+  );
+
+  return [...new Set(combinations)];
+};
+
+// Function to calculate pronunciation similarity
+const getPronunciationSimilarity = (word1: string, word2: string): number => {
+  const distance = levenshteinDistance(word1, word2);
+  const maxLength = Math.max(word1.length, word2.length);
+  return 1 - distance / maxLength;
+};
+
+// Function to find best word match in a list
+const findBestWordMatch = (
+  word: string,
+  candidates: string[]
+): {
+  match: string;
+  similarity: number;
+  index: number;
+} => {
+  let bestMatch = { match: "", similarity: 0, index: -1 };
+
+  candidates.forEach((candidate, index) => {
+    const similarity = getPronunciationSimilarity(word, candidate);
+    if (similarity > bestMatch.similarity) {
+      bestMatch = { match: candidate, similarity: similarity, index };
+    }
+  });
+
+  return bestMatch;
+};
+
 export default function GuidedSpeakingPractice({
   dialogueLines,
   onSeekToTime,
@@ -107,88 +217,50 @@ export default function GuidedSpeakingPractice({
         const result = await response.json();
         console.log("Google Cloud Speech API result:", result);
 
-        if (result.transcript && result.transcript.trim() !== "") {
-          console.log("Transcription result:", result.transcript);
-
-          // Extract alternative transcripts if available
-          const alternatives = result.alternatives || [];
-          const confidence = result.confidence || 0;
-
-          // Set primary transcript
-          const trimmedTranscript = result.transcript.trim();
-          setTranscript(trimmedTranscript);
-          setWaitingForSpeech(false);
-
-          // STRONGER VALIDATION: Check if transcript is empty or too short
-          if (!trimmedTranscript || trimmedTranscript.length < 3) {
-            console.log("Empty or extremely short transcript detected");
-            setResult("error");
-            setRecordingError("No speech was detected. Please try again.");
-            setWaitingForSpeech(true);
-            return;
-          }
-
-          // Check if transcript is too short in terms of words
-          const words = trimmedTranscript.split(/\s+/);
-          if (words.length < 2) {
-            console.log("Too few words detected:", trimmedTranscript);
-            setResult("error");
-            setRecordingError(
-              "Not enough words detected. Please try speaking the full sentence."
-            );
-            setWaitingForSpeech(true);
-            return;
-          }
-
-          // COMPARE: Verify the transcript contains at least one word from the expected sentence
-          const expectedWords = currentLine.text.toLowerCase().split(/\s+/);
-          const hasMatchingWord = words.some((word: string) =>
-            expectedWords.some(
-              (expected: string) =>
-                expected.includes(word) || word.includes(expected)
-            )
+        // CRITICAL: Check for empty transcript from Google API
+        if (!result.transcript || result.transcript.trim() === "") {
+          console.log("Empty transcript received from Google API");
+          setResult("error");
+          setRecordingError(
+            "We couldn't hear anything. Please try speaking the sentence."
           );
-
-          if (!hasMatchingWord && words.length < 4) {
-            console.log("No matching words found in the transcript");
-            setResult("error");
-            setRecordingError(
-              "Your speech didn't match the sentence. Please try again."
-            );
-            setWaitingForSpeech(true);
-            return;
-          }
-
-          // If confidence is high enough (0.85 or higher), immediately set as correct
-          if (confidence >= 0.85) {
-            console.log(
-              `High confidence score (${confidence}): setting result to correct`
-            );
-            setResult("correct");
-            setCanProceed(true);
-            setHighConfidence(true);
-            return;
-          }
-
-          // Otherwise, proceed with normal evaluation
-          if (simpleFeedback) {
-            // In simple feedback mode, just set result to correct and allow proceeding
-            console.log("Simple feedback mode: setting result to correct");
-            setResult("correct");
-            setCanProceed(true);
-          } else {
-            // In detailed feedback mode, evaluate the transcript with alternatives
-            console.log(
-              "Detailed feedback mode: evaluating transcript with alternatives"
-            );
-            evaluateTranscript(result.transcript, alternatives);
-          }
+          setWaitingForSpeech(true);
+          setTranscript("");
+          setCorrections([]);
+          setMissingWords([]);
+          setCanProceed(false);
+          setIsProcessing(false);
           return;
-        } else {
-          console.warn(
-            "Google Cloud Speech API returned empty transcript, falling back to backup API"
-          );
         }
+
+        // Get the transcript and expected text
+        const userTranscript = result.transcript.trim();
+        const expectedText = currentLine.text.trim();
+
+        console.log("Comparing:", {
+          said: userTranscript,
+          expected: expectedText,
+        });
+
+        // Store the transcript for display
+        setTranscript(userTranscript);
+
+        // CRITICAL: Direct comparison with expected text
+        if (userTranscript.toLowerCase() === expectedText.toLowerCase()) {
+          // Perfect match
+          setResult("correct");
+          setCanProceed(true);
+          setHighConfidence(true);
+          setCorrections([]);
+          setMissingWords([]);
+          setIsProcessing(false);
+          return;
+        }
+
+        // If not a perfect match, evaluate the differences
+        evaluateTranscript(userTranscript);
+        setIsProcessing(false);
+        return;
       } catch (googleApiError) {
         console.error("Error with Google Cloud Speech API:", googleApiError);
         console.log("Falling back to backup speech-to-text API...");
@@ -231,8 +303,11 @@ export default function GuidedSpeakingPractice({
         if (!trimmedTranscript || trimmedTranscript.length < 3) {
           console.log("Empty or extremely short transcript detected");
           setResult("error");
-          setRecordingError("No speech was detected. Please try again.");
+          setRecordingError(
+            "We couldn't hear you clearly. Please try speaking the sentence again."
+          );
           setWaitingForSpeech(true);
+          setIsProcessing(false);
           return;
         }
 
@@ -241,10 +316,9 @@ export default function GuidedSpeakingPractice({
         if (words.length < 2) {
           console.log("Too few words detected:", trimmedTranscript);
           setResult("error");
-          setRecordingError(
-            "Not enough words detected. Please try speaking the full sentence."
-          );
+          setRecordingError("Please speak the complete sentence. Try again.");
           setWaitingForSpeech(true);
+          setIsProcessing(false);
           return;
         }
 
@@ -303,192 +377,177 @@ export default function GuidedSpeakingPractice({
     }
   };
 
-  // Evaluate the transcript against the expected sentence
-  const evaluateTranscript = (
-    userTranscript: string,
-    alternativeTranscripts?: string[]
-  ) => {
-    if (!currentLine) return;
+  // Update the evaluateTranscript function
+  const evaluateTranscript = (userTranscript: string) => {
+    if (!currentLine || !userTranscript) return;
 
-    // Check if the transcript is empty or just whitespace
-    if (!userTranscript || !userTranscript.trim()) {
-      console.log("Empty transcript in evaluateTranscript");
-      setRecordingError("No speech was detected. Please try again.");
-      setWaitingForSpeech(true);
-      return;
-    }
+    const normalizedTranscript = userTranscript.toLowerCase().trim();
+    const normalizedExpected = currentLine.text.toLowerCase().trim();
 
-    // Check if there are too few words
-    const wordsInTranscript = userTranscript.trim().split(/\s+/).length;
-    const minRequiredWords = Math.max(
-      1,
-      Math.floor(currentLine.text.length * 0.2)
-    );
+    // Split into words and remove punctuation
+    const transcriptWords = normalizedTranscript
+      .split(/\s+/)
+      .map((word) => word.replace(/[.,?!;:]/g, ""));
+    const expectedWords = normalizedExpected
+      .split(/\s+/)
+      .map((word) => word.replace(/[.,?!;:]/g, ""));
 
-    if (wordsInTranscript < minRequiredWords) {
-      console.log(
-        `Too few words detected (${wordsInTranscript}/${currentLine.text.length})`
-      );
-      setRecordingError(
-        "Too few words detected. Please try speaking the full sentence."
-      );
-      setWaitingForSpeech(true);
-      return;
-    }
+    // Track missing and incorrect words
+    const missing: string[] = [];
+    const corrections: CorrectionHighlight[] = [];
 
-    // Check if transcript has substantial content (at least 20% of expected words)
-    const normalizedExpected = currentLine.text
-      .toLowerCase()
-      .replace(/[.,?!;:]/g, "") // Remove punctuation except apostrophes
-      .trim();
+    // Helper function to check if words match including contractions
+    const wordsMatch = (word1: string, word2: string): boolean => {
+      if (word1 === word2) return true;
 
-    const expectedWords = normalizedExpected.split(/\s+/).filter(Boolean);
+      // Check contractions
+      const contractionMap: { [key: string]: string[] } = {
+        "it's": ["it", "is"],
+        "i'm": ["i", "am"],
+        "you're": ["you", "are"],
+        "we're": ["we", "are"],
+        "they're": ["they", "are"],
+        "he's": ["he", "is"],
+        "she's": ["she", "is"],
+        "that's": ["that", "is"],
+        "there's": ["there", "is"],
+        "what's": ["what", "is"],
+        "where's": ["where", "is"],
+        "when's": ["when", "is"],
+        "who's": ["who", "is"],
+        "how's": ["how", "is"],
+        "i've": ["i", "have"],
+        "you've": ["you", "have"],
+        "we've": ["we", "have"],
+        "they've": ["they", "have"],
+        "would've": ["would", "have"],
+        "could've": ["could", "have"],
+        "should've": ["should", "have"],
+        "must've": ["must", "have"],
+        "won't": ["will", "not"],
+        "can't": ["can", "not"],
+        "don't": ["do", "not"],
+        "doesn't": ["does", "not"],
+        "didn't": ["did", "not"],
+        "hasn't": ["has", "not"],
+        "haven't": ["have", "not"],
+        "hadn't": ["had", "not"],
+        "wouldn't": ["would", "not"],
+        "couldn't": ["could", "not"],
+        "shouldn't": ["should", "not"],
+        "isn't": ["is", "not"],
+        "aren't": ["are", "not"],
+        "wasn't": ["was", "not"],
+        "weren't": ["were", "not"],
+        "i'll": ["i", "will"],
+        "you'll": ["you", "will"],
+        "he'll": ["he", "will"],
+        "she'll": ["she", "will"],
+        "it'll": ["it", "will"],
+        "we'll": ["we", "will"],
+        "they'll": ["they", "will"],
+      };
 
-    // Process all transcripts (main + alternatives) for the best match
-    const allTranscripts = [userTranscript];
-    if (alternativeTranscripts?.length) {
-      allTranscripts.push(...alternativeTranscripts);
-    }
-
-    let bestMatchScore = 0;
-    let bestMatchTranscript = userTranscript;
-    let bestCorrections: CorrectionHighlight[] = [];
-    let bestMissingWords: string[] = [];
-
-    for (const transcript of allTranscripts) {
-      const normalizedTranscript = transcript
-        .toLowerCase()
-        .replace(/[.,?!;:]/g, "")
-        .trim();
-      const transcriptWords = normalizedTranscript.split(/\s+/).filter(Boolean);
-
-      // Align words using a simple dynamic matching approach
-      const corrections: CorrectionHighlight[] = [];
-      const missing: string[] = [];
-      let matchCount = 0;
-      let i = 0; // Index for expectedWords
-      let j = 0; // Index for transcriptWords
-
-      while (i < expectedWords.length || j < transcriptWords.length) {
-        const expectedWord = expectedWords[i] || "";
-        const spokenWord = transcriptWords[j] || "";
-
-        if (!expectedWord && spokenWord) {
-          // Extra word spoken
-          corrections.push({
-            original: spokenWord,
-            correction: "",
-            type: "extra",
-            explanation: "You added an extra word.",
-          });
-          j++;
-        } else if (!spokenWord && expectedWord) {
-          // Missing word
-          corrections.push({
-            original: "",
-            correction: expectedWord,
-            type: "missing",
-            explanation: "You missed this word.",
-          });
-          missing.push(expectedWord);
-          i++;
-        } else {
-          // Compare words
-          const distance = levenshteinDistance(expectedWord, spokenWord);
-          const isContraction = expectedWord.includes("'");
-
-          if (
-            expectedWord === spokenWord ||
-            (distance <= (isContraction ? 2 : 1) && // More leniency for contractions
-              spokenWord.length >= expectedWord.length * 0.7) // Avoid over-matching short words
-          ) {
-            matchCount++;
-            corrections.push({
-              original: spokenWord,
-              correction: expectedWord,
-              type: "correct",
-              explanation: "Good job!",
-            });
-            i++;
-            j++;
-          } else {
-            // Check if it's a pronunciation error or mismatch
-            if (spokenWord && distance <= 3) {
-              corrections.push({
-                original: spokenWord,
-                correction: expectedWord,
-                type: "pronunciation",
-                explanation: "Check your pronunciation.",
-              });
-            } else {
-              corrections.push({
-                original: "",
-                correction: expectedWord,
-                type: "missing",
-                explanation: "You missed this word.",
-              });
-              missing.push(expectedWord);
-            }
-            i++;
-            j++;
-          }
+      // Check if either word is a contraction and matches the expanded form
+      const expandWord = (word: string): string[] => {
+        if (word in contractionMap) {
+          return contractionMap[word];
         }
+        return [word];
+      };
+
+      const word1Parts = expandWord(word1);
+      const word2Parts = expandWord(word2);
+
+      // Check if expanded forms match
+      if (word1Parts.length > 1 || word2Parts.length > 1) {
+        const word1Joined = word1Parts.join(" ");
+        const word2Joined = word2Parts.join(" ");
+        return word1Joined === word2Joined;
       }
 
-      // Calculate score (percentage of expected words matched)
-      const matchPercentage =
-        expectedWords.length > 0
-          ? (matchCount / expectedWords.length) * 100
-          : 0;
+      return false;
+    };
 
-      if (matchPercentage > bestMatchScore) {
-        bestMatchScore = matchPercentage;
-        bestMatchTranscript = transcript;
-        bestCorrections = corrections;
-        bestMissingWords = missing;
+    // First, check if the transcript is completely different
+    let totalDifferentWords = 0;
+    expectedWords.forEach((expectedWord) => {
+      if (!transcriptWords.some((word) => wordsMatch(word, expectedWord))) {
+        totalDifferentWords++;
       }
-    }
-
-    // Update state with best match
-    setTranscript(bestMatchTranscript);
-    setCorrections(bestCorrections);
-    setMissingWords(bestMissingWords);
-
-    // UPDATED LOGIC: Determine if we should show positive feedback
-    const tooManyMissingWords = bestMissingWords.length > 3;
-
-    // Adjust threshold based on mode
-    const threshold = simpleFeedback ? 40 : 70; // Higher threshold for detailed mode
-
-    // Give positive feedback if score is above threshold OR if there are 3 or fewer missing words
-    if (bestMatchScore >= threshold || !tooManyMissingWords) {
-      setResult("correct");
-      setCanProceed(true);
-
-      // Set high confidence for positive reinforcement when 3 or fewer missing words
-      if (!tooManyMissingWords && bestMissingWords.length > 0) {
-        setHighConfidence(true);
-      }
-    } else {
-      // Only show negative feedback if there are more than 3 missing words
-      setResult("incorrect");
-      setCanProceed(false);
-    }
-
-    console.log("Evaluation:", {
-      expected: normalizedExpected,
-      transcript: bestMatchTranscript,
-      score: bestMatchScore,
-      corrections: bestCorrections,
-      missing: bestMissingWords,
-      tooManyMissingWords,
-      showPositiveFeedback: bestMatchScore >= threshold || !tooManyMissingWords,
     });
 
-    if (bestMissingWords.length > 0 && onMissingWords) {
-      // Call the callback with missing words
-      onMissingWords(bestMissingWords);
+    if (totalDifferentWords === expectedWords.length) {
+      // Completely different sentence
+      console.log("Completely different sentence detected");
+      setResult("error");
+      setRecordingError(
+        "That was a different sentence. Please try saying the sentence shown."
+      );
+      setWaitingForSpeech(true);
+      setMissingWords(expectedWords);
+      setCorrections([]);
+      setCanProceed(false);
+      setHighConfidence(false);
+      return;
     }
+
+    // Compare each expected word
+    expectedWords.forEach((expectedWord) => {
+      const matchFound = transcriptWords.some((word) =>
+        wordsMatch(word, expectedWord)
+      );
+      if (!matchFound) {
+        missing.push(expectedWord);
+        corrections.push({
+          original: "",
+          correction: expectedWord,
+          type: "missing",
+          explanation: `Missing word "${expectedWord}"`,
+        });
+      }
+    });
+
+    // Check for extra words
+    transcriptWords.forEach((word) => {
+      const matchFound = expectedWords.some((expected) =>
+        wordsMatch(word, expected)
+      );
+      if (!matchFound) {
+        corrections.push({
+          original: word,
+          correction: "",
+          type: "extra",
+          explanation: `Extra word "${word}"`,
+        });
+      }
+    });
+
+    // Update state with results
+    setMissingWords(missing);
+    setCorrections(corrections);
+
+    // Determine result based on missing words
+    if (missing.length === 0) {
+      setResult("correct");
+      setCanProceed(true);
+      setHighConfidence(true);
+    } else if (missing.length <= 2) {
+      setResult("correct");
+      setCanProceed(true);
+      setHighConfidence(false);
+    } else {
+      setResult("incorrect");
+      setCanProceed(false);
+      setHighConfidence(false);
+    }
+
+    console.log("Evaluation results:", {
+      transcript: normalizedTranscript,
+      expected: normalizedExpected,
+      missing,
+      corrections,
+    });
   };
 
   // Start practice function
@@ -820,7 +879,15 @@ export default function GuidedSpeakingPractice({
         </div>
 
         <div className="p-4 bg-gray-50 rounded-lg mb-4">
-          <p className="text-lg">{currentLine?.text || "No line available"}</p>
+          <p className="text-2xl font-medium text-gray-800 leading-relaxed tracking-wide">
+            {currentLine?.text || "No line available"}
+          </p>
+          {transcript && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-500 mb-2">Your speech:</p>
+              <p className="text-lg text-gray-700 italic">{transcript}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col items-center mb-4">
@@ -906,13 +973,41 @@ export default function GuidedSpeakingPractice({
 
           {result && (
             <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg mb-4 w-full max-w-md">
+              {result === "error" && (
+                <div className="flex flex-col">
+                  <div className="flex items-center mb-2">
+                    <XCircle size={20} className="mr-2 text-red-500" />
+                    <span className="font-medium text-red-700 text-lg">
+                      {recordingError || "Please try speaking again."}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setWaitingForSpeech(true);
+                      setResult(null);
+                      setRecordingError(null);
+                      // Auto-start recording after delay
+                      setTimeout(() => {
+                        startRecording();
+                      }, 1000);
+                    }}
+                    className="mt-3 w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-medium text-sm flex items-center justify-center"
+                  >
+                    <Mic size={16} className="mr-2" />
+                    Try Again
+                  </button>
+                </div>
+              )}
+
               {result === "correct" && (
                 <div className="flex items-center mb-2">
                   <CheckCircle size={20} className="mr-2 text-green-500" />
                   <span className="font-medium text-green-700">
-                    {highConfidence
-                      ? "Well done! Your pronunciation was excellent!"
-                      : "Well done! You can continue to the next sentence."}
+                    {missingWords.length === 0
+                      ? "Excellent! Your pronunciation was perfect!"
+                      : missingWords.length === 1
+                      ? "Good job! Just one word to improve."
+                      : "Well done! You can continue, but try to improve those few words."}
                   </span>
                 </div>
               )}
@@ -922,11 +1017,11 @@ export default function GuidedSpeakingPractice({
                   <div className="flex items-center mb-2">
                     <XCircle size={20} className="mr-2 text-red-500" />
                     <span className="font-medium text-red-700">
-                      Try again. Some words were not pronounced correctly.
+                      Please try again. You missed more than two words.
                     </span>
                   </div>
 
-                  {missingWords.length > 0 && missingWords.length <= 3 && (
+                  {missingWords.length > 0 && (
                     <div className="mt-2 p-2 bg-red-50 rounded-lg">
                       <p className="text-sm font-medium text-red-700 mb-1">
                         Missing or mispronounced words:
@@ -937,7 +1032,7 @@ export default function GuidedSpeakingPractice({
                     </div>
                   )}
 
-                  <div className="flex mt-3 gap-2">
+                  <div className="flex mt-3">
                     <button
                       onClick={() => {
                         setWaitingForSpeech(true);
@@ -947,19 +1042,10 @@ export default function GuidedSpeakingPractice({
                           startRecording();
                         }, 1000);
                       }}
-                      className="flex-1 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-medium text-sm flex items-center justify-center"
+                      className="w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-medium text-sm flex items-center justify-center"
                     >
                       Try Again
                     </button>
-
-                    {missingWords.length <= 3 && (
-                      <button
-                        onClick={handleNextSentence}
-                        className="flex-1 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg font-medium text-sm flex items-center justify-center"
-                      >
-                        Continue Anyway
-                      </button>
-                    )}
                   </div>
                 </div>
               )}

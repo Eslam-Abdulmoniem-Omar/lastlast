@@ -21,6 +21,8 @@ import { motion } from "framer-motion";
 import SpeechRecorder from "./SpeechRecorder";
 import GuidedSpeakingPractice from "./GuidedSpeakingPractice";
 import VocabularyTest from "./VocabularyTest";
+import MissingWordsTest from "./MissingWordsTest";
+import { useRouter } from "next/navigation";
 
 interface TimestampedYouTubePlayerProps {
   podcast: Podcast;
@@ -28,71 +30,29 @@ interface TimestampedYouTubePlayerProps {
 }
 
 // Define a type for the practice modes
-type PracticeMode = "listening" | "vocabulary" | "speaking" | "test";
+type PracticeMode = "listening" | "vocabulary" | "speaking";
 
-// Fallback dialogue lines if podcast doesn't have dialogueSegments
-const fallbackDialogueLines: DialogueLine[] = [
-  { id: "1", text: "It's no use, Joe.", startTime: 0.06, endTime: 2.399 },
-  {
-    id: "2",
-    text: "Joe, we've got to have it out.",
-    startTime: 2.399,
-    endTime: 4.5,
-  },
-  {
-    id: "3",
-    text: "I've loved you ever since I've known you, Joe.",
-    startTime: 4.5,
-    endTime: 6.6,
-  },
-  {
-    id: "4",
-    text: "I couldn't help it, and I tried to show, and you wouldn't let me.",
-    startTime: 6.6,
-    endTime: 7.799,
-  },
-  {
-    id: "5",
-    text: "Which is fine, but I must make you hear me now and give me an answer.",
-    startTime: 7.799,
-    endTime: 9.9,
-  },
-  {
-    id: "6",
-    text: "Because I cannot go on like this any longer.",
-    startTime: 9.9,
-    endTime: 12.0,
-  },
-  {
-    id: "7",
-    text: "Even Billiards, I gave up everything you didn't like.",
-    startTime: 12.0,
-    endTime: 14.16,
-  },
-  {
-    id: "8",
-    text: "I'm happy I did, it's fine.",
-    startTime: 14.16,
-    endTime: 15.599,
-  },
-  {
-    id: "9",
-    text: "And I waited, and I never complained because I...",
-    startTime: 15.599,
-    endTime: 19.5,
-  },
-  {
-    id: "10",
-    text: "You know, I figured you'd love me, Joe.",
-    startTime: 19.5,
-    endTime: 22.0,
-  },
-];
+// Use an empty array instead to force videos to have their own transcripts
+const fallbackDialogueLines: DialogueLine[] = [];
 
 export default function TimestampedYouTubePlayer({
   podcast,
   onComplete,
 }: TimestampedYouTubePlayerProps) {
+  // Generate a unique player ID for this component instance
+  const playerDivId = useRef(
+    `youtube-player-${Math.random().toString(36).substring(2, 9)}`
+  );
+
+  // Check if the podcast has dialogue segments and throw an error if not
+  useEffect(() => {
+    if (!podcast.dialogueSegments || podcast.dialogueSegments.length === 0) {
+      console.error(
+        `Video ${podcast.id} is missing dialogue segments/transcript!`
+      );
+    }
+  }, [podcast]);
+
   // Generate dialogue lines from podcast dialogueSegments if available
   const dialogueLines = podcast.dialogueSegments
     ? podcast.dialogueSegments.map((segment, index) => ({
@@ -149,6 +109,7 @@ export default function TimestampedYouTubePlayer({
   const playerRef = useRef<YT.Player | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const { user } = useAuth();
+  const router = useRouter();
 
   // Current sentences for practice mode
   const currentSentences = dialogueLines.map((line) => line.text);
@@ -156,24 +117,26 @@ export default function TimestampedYouTubePlayer({
 
   // Load YouTube API
   useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
-
-      window.onYouTubeIframeAPIReady = initializePlayer;
-    } else {
-      initializePlayer();
-    }
+    // Set a backup timeout to mark player as ready in case something fails
+    const readyTimeout = setTimeout(() => {
+      if (!playerReady) {
+        console.warn(
+          "YouTube player taking too long to load, forcing ready state"
+        );
+        setPlayerReady(true);
+      }
+    }, 5000);
 
     return () => {
-      window.onYouTubeIframeAPIReady = null;
+      // Clear timers
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
+
+      clearTimeout(readyTimeout);
     };
-  }, []);
+  }, [podcast.youtubeUrl]); // Only reload if URL changes
 
   // Auto-activate the first dialogue line when component mounts
   useEffect(() => {
@@ -192,183 +155,154 @@ export default function TimestampedYouTubePlayer({
     }
   }, [isRecording]);
 
-  // Initialize YouTube player
-  const initializePlayer = () => {
-    if (!podcast.youtubeUrl) return;
-
-    const videoId = extractVideoId(podcast.youtubeUrl);
-    if (!videoId) return;
-
-    if (playerRef.current) {
-      playerRef.current.destroy();
+  // Start the timer to update current time
+  const startTimeUpdateTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
 
-    playerRef.current = new YT.Player("youtube-player", {
-      videoId,
-      playerVars: {
-        autoplay: 0,
-        controls: 1,
-        disablekb: 1,
-        fs: 0,
-        modestbranding: 1,
-        rel: 0,
-        enablejsapi: 1,
-        origin: window.location.origin,
-        playsinline: 1,
-      },
-      events: {
-        onReady: onPlayerReady,
-        onStateChange: onPlayerStateChange,
-      },
-    });
-  };
-
-  const onPlayerReady = (event: YT.PlayerEvent) => {
-    setPlayerReady(true);
-
-    // Automatically activate the first dialogue line
-    if (dialogueLines.length > 0) {
-      const firstLine = dialogueLines[0];
-      setActiveLineId(firstLine.id);
-      setCurrentSentenceIndex(0);
-    }
-
-    // Start a timer to update current time
     timerRef.current = setInterval(() => {
-      if (playerRef.current && isPlaying) {
-        const currentTime = playerRef.current.getCurrentTime();
-        setCurrentTime(currentTime);
-
-        // Find the active line based on current time
-        const activeLine = dialogueLines.find(
-          (line) =>
-            currentTime >= line.startTime &&
-            (!line.endTime || currentTime < line.endTime)
-        );
-
-        if (activeLine) {
-          setActiveLineId(activeLine.id);
-          // Update current sentence index for practice mode
-          const lineIndex = dialogueLines.findIndex(
-            (line) => line.id === activeLine.id
+      try {
+        // Get the iframe element
+        const iframe = document.getElementById(
+          "youtube-player-iframe"
+        ) as HTMLIFrameElement;
+        if (iframe && iframe.contentWindow) {
+          // Send postMessage to get current time
+          iframe.contentWindow.postMessage(
+            '{"event":"command","func":"getCurrentTime","args":""}',
+            "*"
           );
-          if (lineIndex !== -1) {
-            setCurrentSentenceIndex(lineIndex);
-          }
         }
+      } catch (e) {
+        console.warn("Error updating player time:", e);
       }
-    }, 100); // Update every 100ms
+    }, 1000); // Check every second
   };
 
-  const onPlayerStateChange = (event: YT.OnStateChangeEvent) => {
-    if (event.data === YT.PlayerState.PLAYING) {
-      setIsPlaying(true);
-    } else if (
-      event.data === YT.PlayerState.PAUSED ||
-      event.data === YT.PlayerState.ENDED
-    ) {
-      setIsPlaying(false);
-    }
-
-    // Update progress when user watches the video
-    if (user && event.data === YT.PlayerState.PLAYING) {
-      updateListeningProgress(user.uid, podcast.id).catch((error) =>
-        console.error("Error updating listening progress:", error)
-      );
-    }
-
-    // Trigger onComplete when the video is over
-    if (event.data === YT.PlayerState.ENDED) {
-      onComplete?.();
+  // Helper function to send commands to the iframe
+  const sendCommand = (command: string, value?: any) => {
+    try {
+      const iframe = document.getElementById(
+        "youtube-player-iframe"
+      ) as HTMLIFrameElement;
+      if (iframe && iframe.contentWindow) {
+        const args = value !== undefined ? `,"args":[${value}]` : "";
+        iframe.contentWindow.postMessage(
+          `{"event":"command","func":"${command}"${args}}`,
+          "*"
+        );
+      }
+    } catch (e) {
+      console.error("Error sending command to iframe:", e);
     }
   };
 
+  // Helper function to extract video ID from URL
   const extractVideoId = (url: string): string | null => {
-    const regExp =
-      /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return match && match[2].length === 11 ? match[2] : null;
+    if (!url) return null;
+
+    try {
+      // Handle various YouTube URL formats
+
+      // 1. youtube.com/shorts/ID
+      if (url.includes("youtube.com/shorts/")) {
+        const shortsMatch = url.match(/youtube\.com\/shorts\/([^/?&]+)/);
+        if (shortsMatch && shortsMatch[1]) return shortsMatch[1];
+      }
+
+      // 2. youtube.com/embed/ID
+      if (url.includes("youtube.com/embed/")) {
+        const embedMatch = url.match(/youtube\.com\/embed\/([^/?&]+)/);
+        if (embedMatch && embedMatch[1]) return embedMatch[1];
+      }
+
+      // 3. youtube.com/watch?v=ID
+      if (url.includes("youtube.com/watch")) {
+        const urlObj = new URL(url);
+        const videoId = urlObj.searchParams.get("v");
+        if (videoId) return videoId;
+      }
+
+      // 4. youtu.be/ID
+      if (url.includes("youtu.be/")) {
+        const youtubeMatch = url.match(/youtu\.be\/([^/?&]+)/);
+        if (youtubeMatch && youtubeMatch[1]) return youtubeMatch[1];
+      }
+
+      // 5. Raw video ID (just in case)
+      if (url.match(/^[a-zA-Z0-9_-]{11}$/)) {
+        return url;
+      }
+
+      // Fallback to regex for any other format
+      const regExp = /^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      if (match && match[2].length === 11) return match[2];
+
+      console.warn("Could not extract video ID from URL:", url);
+      return null;
+    } catch (e) {
+      console.error("Error extracting video ID:", e, "URL:", url);
+      return null;
+    }
   };
 
   const seekToTime = (time: number) => {
-    if (!playerRef.current || !playerReady) {
-      console.error("Player not ready for seeking");
-      return;
-    }
-
     try {
-      // Convert time to a precise value with 2 decimal places
-      const preciseTime = parseFloat(time.toFixed(2));
+      // Get the iframe and seek to the timestamp
+      const iframe = document.getElementById(
+        "youtube-player-iframe"
+      ) as HTMLIFrameElement;
+      if (iframe && iframe.contentWindow) {
+        // First pause the video
+        sendCommand("pauseVideo");
 
-      // Remove the offset that was causing misalignment - seek to the exact time
-      const seekPosition = preciseTime;
+        // Then seek to the position
+        setTimeout(() => {
+          sendCommand("seekTo", time);
 
-      console.log(
-        `Attempting to seek to position: ${seekPosition}s (original: ${time}s)`
+          // Then play the video
+          setTimeout(() => {
+            sendCommand("playVideo");
+            setIsPlaying(true);
+          }, 100);
+        }, 100);
+      }
+
+      // Find the active line based on current time
+      const activeLine = dialogueLines.find(
+        (line) =>
+          time >= line.startTime && (!line.endTime || time < line.endTime)
       );
 
-      // Force pause first to ensure reliable seeking
-      playerRef.current?.pauseVideo();
-
-      // Use setTimeout to allow the pause to take effect
-      setTimeout(() => {
-        if (!playerRef.current) {
-          console.error("Player reference lost during seeking timeout");
-          return;
+      if (activeLine) {
+        setActiveLineId(activeLine.id);
+        // Update current sentence index for practice mode
+        const lineIndex = dialogueLines.findIndex(
+          (line) => line.id === activeLine.id
+        );
+        if (lineIndex !== -1) {
+          setCurrentSentenceIndex(lineIndex);
         }
-
-        // Seek to position with exact seconds
-        playerRef.current.seekTo(seekPosition, true);
-
-        // Short delay before playing to ensure the seek completes
-        setTimeout(() => {
-          if (!playerRef.current) {
-            console.error("Player reference lost during play timeout");
-            return;
-          }
-
-          playerRef.current.playVideo();
-          setIsPlaying(true);
-          console.log(`Playback started at position: ${seekPosition}s`);
-
-          // Find the line that corresponds to this time
-          const activeLine = dialogueLines.find(
-            (line) =>
-              preciseTime >= line.startTime &&
-              (!line.endTime || preciseTime < line.endTime)
-          );
-
-          if (activeLine) {
-            setActiveLineId(activeLine.id);
-            // Update current sentence index for practice mode
-            const lineIndex = dialogueLines.findIndex(
-              (line) => line.id === activeLine.id
-            );
-            if (lineIndex !== -1) {
-              setCurrentSentenceIndex(lineIndex);
-            }
-          }
-        }, 100);
-      }, 50);
+      }
     } catch (error) {
       console.error("Error seeking to timestamp:", error);
     }
   };
 
   const pauseVideo = () => {
-    if (!playerRef.current || !playerReady) return;
-
-    playerRef.current.pauseVideo();
+    sendCommand("pauseVideo");
     setIsPlaying(false);
   };
 
   const togglePlayPause = () => {
-    if (!playerRef.current || !playerReady) return;
-
     if (isPlaying) {
-      playerRef.current.pauseVideo();
+      sendCommand("pauseVideo");
+      setIsPlaying(false);
     } else {
-      playerRef.current.playVideo();
+      sendCommand("playVideo");
+      setIsPlaying(true);
     }
   };
 
@@ -397,13 +331,70 @@ export default function TimestampedYouTubePlayer({
   };
 
   const togglePracticeMode = (mode: PracticeMode) => {
-    // Remove the redirection for speaking mode
-    setPracticeMode(mode);
-
-    // If switching to speaking mode, pause the video
+    // If switching to speaking mode, redirect to speech-to-text page with transcript
     if (mode === "speaking") {
       pauseVideo();
+
+      // Check which video this is to ensure correct transcript is used
+      const isJoeDialogue = podcast.dialogueSegments?.some(
+        (segment) =>
+          segment.text.includes("Joe") ||
+          segment.text.includes("loved you ever since")
+      );
+
+      // Create transcript format required by speech-to-text page with proper speaker names
+      const formattedLines = dialogueLines.map((line, index) => {
+        // Use original speaker name if available, otherwise alternate between A and B
+        const speaker =
+          podcast.dialogueSegments &&
+          podcast.dialogueSegments[index]?.speakerName
+            ? podcast.dialogueSegments[index].speakerName
+            : index % 2 === 0
+            ? "Speaker A"
+            : "Speaker B";
+
+        return {
+          speaker,
+          text: line.text,
+        };
+      });
+
+      // Include the video ID and URL in the data to ensure proper identification
+      const practiceData = {
+        videoId: podcast.id,
+        title: podcast.title,
+        youtubeUrl: podcast.youtubeUrl,
+        transcript: formattedLines,
+        isJoeDialogue: isJoeDialogue, // Add a flag to help with identification
+      };
+
+      // Log what we're sending to help debug
+      console.log("Sending practice data for video:", podcast.title);
+      console.log("Video ID:", podcast.id);
+      console.log("First line of transcript:", formattedLines[0]?.text);
+
+      // Save to localStorage for better data preservation
+      localStorage.setItem(
+        "current-speech-practice",
+        JSON.stringify(practiceData)
+      );
+
+      // Create a serialized version of the transcript to pass via URL
+      const serializedTranscript = encodeURIComponent(
+        JSON.stringify(formattedLines)
+      );
+
+      // Navigate to speech-to-text with transcript data, video title, and video ID
+      router.push(
+        `/short-videos/speech-to-text?transcript=${serializedTranscript}&title=${encodeURIComponent(
+          podcast.title
+        )}&videoId=${podcast.id}`
+      );
+      return;
     }
+
+    // For other modes, just update the state
+    setPracticeMode(mode);
   };
 
   const formatTime = (seconds: number): string => {
@@ -670,29 +661,36 @@ export default function TimestampedYouTubePlayer({
   // Add a new render function for the test mode
   const renderTestMode = () => {
     return (
-      <div className="mt-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Vocabulary Test</h3>
-          <button
-            onClick={() => togglePracticeMode("listening")}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Return to Listening
-          </button>
-        </div>
+      <div className="w-full h-full bg-[#1b2b48]/50 backdrop-blur-sm p-6 overflow-y-auto">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-2xl font-bold text-white mb-2">
+                Complete the Missing Words
+              </h3>
+              <p className="text-white/70">
+                Test your understanding by filling in the missing words from the
+                video.
+              </p>
+            </div>
+            <button
+              onClick={() => togglePracticeMode("listening")}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#4d7efa]/20 hover:bg-[#4d7efa]/30 text-[#4d7efa] rounded-lg transition-all duration-200"
+            >
+              <Headphones size={18} />
+              <span>Return to Listening</span>
+            </button>
+          </div>
 
-        <VocabularyTest
-          struggledWords={
-            struggledWords.length > 0
-              ? struggledWords
-              : getCommonWordsFromDialogue()
-          }
-          videoContext={podcast.title}
-          onComplete={() => {
-            // Optionally do something when test is completed
-            console.log("Test completed");
-          }}
-        />
+          <div className="bg-[#111f3d]/70 backdrop-blur-sm rounded-xl border border-[#2e3b56]/50 shadow-lg">
+            <MissingWordsTest
+              onComplete={() => {
+                console.log("Test completed");
+                togglePracticeMode("listening");
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   };
@@ -730,24 +728,9 @@ export default function TimestampedYouTubePlayer({
   };
 
   return (
-    <div className="w-full bg-[#1b2b48]/80 backdrop-blur-sm rounded-lg shadow-xl border border-[#2e3b56]/50 overflow-hidden">
+    <div className="yt-player-wrapper bg-[#0c1527] text-white rounded-lg overflow-hidden shadow-lg mb-4 h-[650px]">
       <style jsx global>{`
-        /* Custom scrollbar for the component */
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(27, 43, 72, 0.5);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(77, 126, 250, 0.5);
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(77, 126, 250, 0.7);
-        }
-
-        /* Animation for popup */
+        /* Animations for word highlighting and popups */
         @keyframes fadeIn {
           from {
             opacity: 0;
@@ -759,7 +742,7 @@ export default function TimestampedYouTubePlayer({
 
         @keyframes scaleIn {
           from {
-            transform: scale(0.95);
+            transform: scale(0.9);
             opacity: 0;
           }
           to {
@@ -812,12 +795,10 @@ export default function TimestampedYouTubePlayer({
                   : "hover:bg-[#0c1527] hover:text-[#4d7efa]"
               }`}
             >
-              <Headphones
-                size={20}
-                className={practiceMode === "listening" ? "text-[#4d7efa]" : ""}
-              />
-              <span className="font-medium">Listening</span>
+              <Headphones size={18} />
+              <span>Listening</span>
             </button>
+
             <button
               onClick={() => togglePracticeMode("vocabulary")}
               className={`flex-1 p-3 flex items-center justify-center space-x-2 transition-all duration-200 ${
@@ -826,15 +807,10 @@ export default function TimestampedYouTubePlayer({
                   : "hover:bg-[#0c1527] hover:text-[#4d7efa]"
               }`}
             >
-              <BookOpen
-                size={20}
-                className={
-                  practiceMode === "vocabulary" ? "text-[#4d7efa]" : ""
-                }
-              />
-              <span className="font-medium">Vocabulary</span>
+              <BookOpen size={18} />
+              <span>Vocabulary</span>
             </button>
-            {/* Re-enable Speaking mode */}
+
             <button
               onClick={() => togglePracticeMode("speaking")}
               className={`flex-1 p-3 flex items-center justify-center space-x-2 transition-all duration-200 ${
@@ -843,168 +819,150 @@ export default function TimestampedYouTubePlayer({
                   : "hover:bg-[#0c1527] hover:text-[#4d7efa]"
               }`}
             >
-              <Mic
-                size={20}
-                className={practiceMode === "speaking" ? "text-[#4d7efa]" : ""}
-              />
-              <span className="font-medium">Speaking</span>
-            </button>
-            {/* Add a Test button to the mode selection */}
-            <button
-              onClick={() => togglePracticeMode("test")}
-              className={`flex items-center justify-center py-2 px-3 text-sm rounded-md ${
-                practiceMode === "test"
-                  ? "bg-purple-100 text-purple-700 border border-purple-300"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <BookOpen size={16} className="mr-1" />
-              <span>Test</span>
+              <Mic size={18} />
+              <span>Speaking</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row h-[520px]">
-        {/* Video Player */}
-        <div
-          className={`md:w-1/2 ${
-            practiceMode === "speaking" ? "md:w-full" : ""
-          }`}
-        >
-          <div className="relative w-full" style={{ aspectRatio: "10/9" }}>
-            <div id="youtube-player" className="w-full h-full"></div>
+      {/* YouTube Player and Transcript Container */}
+      <div className="flex flex-col md:flex-row">
+        {/* YouTube Player Column */}
+        <div className="w-full md:w-1/2 aspect-video relative">
+          {!playerReady && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0c1527]">
+              <div className="animate-spin h-10 w-10 border-t-2 border-b-2 border-[#4d7efa] rounded-full"></div>
+            </div>
+          )}
 
-            {!playerReady && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#1b2b48]/50 backdrop-blur-sm">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-              </div>
-            )}
-          </div>
+          {/* Direct iframe approach instead of YouTube API */}
+          <iframe
+            src={`https://www.youtube.com/embed/${extractVideoId(
+              podcast.youtubeUrl
+            )}`}
+            className="absolute inset-0 w-full h-[50%] z-5"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            id="youtube-player-iframe"
+            allowFullScreen
+            onLoad={() => {
+              setPlayerReady(true);
+              if (dialogueLines.length > 0) {
+                setActiveLineId(dialogueLines[0].id);
+                setCurrentSentenceIndex(0);
+              }
+            }}
+          ></iframe>
 
-          {/* Player Controls */}
-          <div className="p-4 bg-[#1b2b48]/50 backdrop-blur-sm border-b border-[#2e3b56]/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+          {/* Keep the placeholder div for compatibility but don't use it */}
+          <div id={playerDivId.current} className="hidden" />
+        </div>
+
+        {/* Right side content based on practice mode */}
+        <div className="md:w-1/2 bg-[#1b2b48]/50 backdrop-blur-sm border-l border-[#2e3b56]/50 overflow-y-auto custom-scrollbar">
+          {/* Transcript view for Listening mode */}
+          {practiceMode === "listening" && (
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-white">Dialogue</h3>
                 <button
-                  onClick={togglePlayPause}
-                  className="p-2 rounded-full bg-primary text-white hover:bg-primary-dark transition-colors"
-                  aria-label={isPlaying ? "Pause" : "Play"}
+                  onClick={handleTranslateAll}
+                  className="flex items-center space-x-1 text-sm px-3 py-1 bg-primary/20 hover:bg-primary/30 text-primary-light rounded-md transition"
                 >
-                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                  <Globe size={16} />
+                  <span>Translate All</span>
                 </button>
               </div>
 
-              {/* Current time display */}
-              <div className="text-gray-600 font-medium">
-                {formatTime(currentTime)} / {formatTime(podcast.duration)}
-              </div>
+              <div className="space-y-4">{renderListeningMode()}</div>
+
+              {recordingFeedback && (
+                <div className="mt-4 p-3 bg-primary/10 backdrop-blur-sm border border-primary/20 rounded-lg">
+                  <p className="text-white">{recordingFeedback}</p>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Transcript view for Listening mode */}
-        {practiceMode === "listening" && (
-          <div className="md:w-1/2 bg-[#1b2b48]/50 backdrop-blur-sm border-l border-[#2e3b56]/50 p-4 max-h-[600px] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-white">Dialogue</h3>
-              <button
-                onClick={handleTranslateAll}
-                className="flex items-center space-x-1 text-sm px-3 py-1 bg-primary/20 hover:bg-primary/30 text-primary-light rounded-md transition"
-              >
-                <Globe size={16} />
-                <span>Translate All</span>
-              </button>
-            </div>
-
-            <div className="space-y-4">{renderListeningMode()}</div>
-
-            {recordingFeedback && (
-              <div className="mt-4 p-3 bg-primary/10 backdrop-blur-sm border border-primary/20 rounded-lg">
-                <p className="text-white">{recordingFeedback}</p>
+          {/* Vocabulary Mode */}
+          {practiceMode === "vocabulary" && (
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-white">Vocabulary</h3>
+                <div className="text-sm text-white/70">
+                  <span className="font-medium">English → Arabic</span>
+                </div>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* Vocabulary Mode */}
-        {practiceMode === "vocabulary" && (
-          <div className="md:w-1/2 bg-[#1b2b48]/50 backdrop-blur-sm border-l border-[#2e3b56]/50 p-4 max-h-[600px] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-white">Vocabulary</h3>
-              <div className="text-sm text-white/70">
-                <span className="font-medium">English → Arabic</span>
-              </div>
-            </div>
+              <div className="space-y-6">
+                {/* Display sentences with clickable words */}
+                <div className="bg-[#111f3d]/70 backdrop-blur-sm rounded-lg p-6 border border-[#2e3b56]/70 shadow-lg">
+                  <h4 className="text-white font-medium mb-4">
+                    Sentences with Clickable Words
+                  </h4>
+                  <p className="text-white/70 text-sm mb-4">
+                    Click on any word to see its translation and contextual
+                    meaning
+                  </p>
 
-            <div className="space-y-6">
-              {/* Display sentences with clickable words - NO POPUP here */}
-              <div className="bg-[#111f3d]/70 backdrop-blur-sm rounded-lg p-6 border border-[#2e3b56]/70 shadow-lg">
-                <h4 className="text-white font-medium mb-4">
-                  Sentences with Clickable Words
-                </h4>
-                <p className="text-white/70 text-sm mb-4">
-                  Click on any word to see its translation and contextual
-                  meaning
-                </p>
-
-                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
-                  {dialogueLines.map((line) => (
-                    <div
-                      key={line.id}
-                      className={`p-3 rounded-lg transition-all cursor-pointer border ${
-                        activeLineId === line.id
-                          ? "bg-primary/20 border-primary/30"
-                          : "bg-white/5 hover:bg-white/10 border-[#2e3b56]/30"
-                      }`}
-                    >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs bg-[#0c1527] px-2 py-0.5 rounded text-white/70">
-                          {formatTime(line.startTime)}
-                        </span>
-                        <button
-                          className="text-xs bg-primary/20 text-primary-light px-2 py-1 rounded hover:bg-primary/30 transition-colors"
-                          onClick={() =>
-                            handleVocabularySegmentPlay(line.startTime)
-                          }
-                        >
-                          Play
-                        </button>
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                    {dialogueLines.map((line) => (
+                      <div
+                        key={line.id}
+                        className={`p-3 rounded-lg transition-all cursor-pointer border ${
+                          activeLineId === line.id
+                            ? "bg-primary/20 border-primary/30"
+                            : "bg-white/5 hover:bg-white/10 border-[#2e3b56]/30"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs bg-[#0c1527] px-2 py-0.5 rounded text-white/70">
+                            {formatTime(line.startTime)}
+                          </span>
+                          <button
+                            className="text-xs bg-primary/20 text-primary-light px-2 py-1 rounded hover:bg-primary/30 transition-colors"
+                            onClick={() =>
+                              handleVocabularySegmentPlay(line.startTime)
+                            }
+                          >
+                            Play
+                          </button>
+                        </div>
+                        <p className="text-white leading-relaxed text-[0.95rem] tracking-tight">
+                          {renderClickableWords(line.text)}
+                        </p>
                       </div>
-                      <p className="text-white leading-relaxed text-[0.95rem] tracking-tight">
-                        {renderClickableWords(line.text)}
-                      </p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Guided Speaking Practice for Speaking mode */}
-        {practiceMode === "speaking" && (
-          <div className="w-full p-4">
-            <GuidedSpeakingPractice
-              dialogueLines={dialogueLines}
-              onSeekToTime={seekToTime}
-              onPauseVideo={pauseVideo}
-              onPlayVideo={() => {
-                if (playerRef.current && playerReady) {
-                  playerRef.current.playVideo();
-                  setIsPlaying(true);
-                }
-              }}
-              onComplete={() => {
-                togglePracticeMode("listening");
-                setRecordingFeedback("Guided practice completed! Great job!");
-              }}
-              currentTime={currentTime}
-              simpleFeedback={false}
-              onMissingWords={addStruggledWords}
-            />
-          </div>
-        )}
+          {/* Speaking Mode */}
+          {practiceMode === "speaking" && (
+            <div className="p-4">
+              <GuidedSpeakingPractice
+                dialogueLines={dialogueLines}
+                onSeekToTime={seekToTime}
+                onPauseVideo={pauseVideo}
+                onPlayVideo={() => {
+                  if (playerRef.current && playerReady) {
+                    playerRef.current.playVideo();
+                    setIsPlaying(true);
+                  }
+                }}
+                onComplete={() => {
+                  togglePracticeMode("listening");
+                  setRecordingFeedback("Guided practice completed! Great job!");
+                }}
+                currentTime={currentTime}
+                simpleFeedback={false}
+                onMissingWords={addStruggledWords}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sentence translation popup */}
@@ -1298,9 +1256,6 @@ export default function TimestampedYouTubePlayer({
           </div>
         </div>
       )}
-
-      {/* Test mode */}
-      {practiceMode === "test" && renderTestMode()}
     </div>
   );
 }
