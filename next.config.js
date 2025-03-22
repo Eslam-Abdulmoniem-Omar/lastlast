@@ -67,19 +67,6 @@ const nextConfig = {
     RAPIDAPI_KEY: process.env.RAPIDAPI_KEY,
   },
 
-  // Improve production builds
-
-  experimental: {
-    optimizeCss: true,
-    serverComponentsExternalPackages: ["@google-cloud/speech"],
-  },
-
-  // Disable server rendering for certain paths to avoid issues
-
-  serverRuntimeConfig: {
-    PROJECT_ROOT: __dirname,
-  },
-
   // Increase the memory limit for the build process
 
   transpilePackages: ["@ai-sdk/anthropic", "@ai-sdk/openai"],

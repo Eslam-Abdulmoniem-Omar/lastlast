@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "yarn vercel-build",
+  "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "outputDirectory": ".next",
   "builds": [
@@ -22,13 +22,5 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ],
-  "ignoreCommand": "node -e \"process.exit(process.env.VERCEL_ENV === 'preview' ? 0 : 1)\"",
-  "framework": "nextjs",
-  "git": {
-    "deploymentEnabled": {
-      "main": false,
-      "main-deploy": true
-    }
-  }
+  ]
 }
