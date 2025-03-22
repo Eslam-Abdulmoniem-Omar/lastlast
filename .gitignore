@@ -28,15 +28,17 @@ yarn-error.log*
 
 # local env files
 .env*.local
-.env*.bak
 .env
+.env*.bak
 
 # vercel
-.vercel
+.vercel/README.txt
+.vercel/project.json
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+# Do not ignore next-env.d.ts as it's needed for TypeScript setup
+# next-env.d.ts
 
 # python virtual environment
 /.venv/
@@ -82,5 +84,7 @@ Thumbs.db
 
 # Service account credentials
 src/metal-cascade-*.json
+src/metal-cascade-*.json.bak
 # Google service account credentials
 *-i3-*.json
+*-i3-*.json.bak
