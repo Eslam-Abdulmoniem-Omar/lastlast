@@ -29,6 +29,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env*.bak
+.env
 
 # vercel
 .vercel
@@ -36,8 +37,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-.env
 
 # python virtual environment
 /.venv/
@@ -82,11 +81,6 @@ env/
 Thumbs.db
 
 # Service account credentials
-*.json
-# Add exceptions for package.json, tsconfig.json, etc.
-!package.json
-!tsconfig.json
-!.eslintrc.json
-!tailwind.config.js
-!postcss.config.js
-!next.config.js
+src/metal-cascade-*.json
+# Google service account credentials
+*-i3-*.json
