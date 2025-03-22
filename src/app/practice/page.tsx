@@ -1,15 +1,7 @@
 "use client";
 
 import React from "react";
-import dynamic from 'next/dynamic';
-import { Suspense } from 'react';
-import LoadingDots from '@/components/ui/loading-dots';
-
-// Dynamically import the GuidedSpeakingPractice component with no SSR
-const GuidedSpeakingPractice = dynamic(
-  () => import('../../components/GuidedSpeakingPractice'),
-  { ssr: false, loading: () => <div className="p-6 flex justify-center"><LoadingDots /></div> }
-);
+import GuidedSpeakingPractice from "../../components/GuidedSpeakingPractice";
 
 export default function PracticePage() {
   // Example script - you can make this dynamic based on your needs
@@ -41,12 +33,10 @@ export default function PracticePage() {
             attention to contractions and pronunciation.
           </p>
 
-          <Suspense fallback={<div className="p-6 flex justify-center"><LoadingDots /></div>}>
-            <GuidedSpeakingPractice
-              dialogueLines={dialogueLines}
-              simpleFeedback={true}
-            />
-          </Suspense>
+          <GuidedSpeakingPractice
+            dialogueLines={dialogueLines}
+            simpleFeedback={true}
+          />
         </div>
 
         <div className="mt-8 bg-blue-50 rounded-lg p-6">
