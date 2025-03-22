@@ -2,208 +2,192 @@ import { Podcast } from "../types";
 
 export const sampleYoutubeShort: Podcast = {
   id: "sample-youtube-short-1",
-  title: "Dramatic Dialogue Practice",
+  title: "Police Confrontation",
   description:
-    "Practice English with this dramatic dialogue between two speakers discussing their relationship.",
+    "Practice English with this tense dialogue between a police officer and a suspect.",
   audioUrl: "https://example.com/audio.mp3", // Placeholder
   transcriptUrl: "https://example.com/transcript.txt", // Placeholder
-  youtubeUrl: "https://www.youtube.com/embed/91MhNtDNAbg", // The provided YouTube URL in embed format
+  youtubeUrl: "https://www.youtube.com/embed/DxmiTVV3GHY", // New video URL
   level: "intermediate",
-  duration: 30, // Estimated duration in seconds
-  topics: ["conversation", "relationships", "emotions"],
+  duration: 40, // Estimated duration in seconds
+  topics: ["conversation", "confrontation", "police", "crime"],
   hostName: "English Drama Practice",
   publishedDate: new Date().toISOString(),
   isShort: true,
   questions: [
     {
       id: "q1",
-      text: "What emotions is Speaker A expressing in this dialogue?",
-      timestamp: 5,
+      text: "What is the suspect threatening to do?",
+      timestamp: 15,
     },
     {
       id: "q2",
-      text: "How does Speaker B respond to Speaker A's feelings?",
-      timestamp: 15,
+      text: "How does the police officer try to defuse the situation?",
+      timestamp: 25,
     },
   ],
   referenceAnswers: [
     {
       questionId: "q1",
-      text: "Speaker A is expressing frustration, love, and a need for resolution in their relationship with Joe.",
+      text: "The suspect is threatening to detonate IEDs (improvised explosive devices) rigged throughout the house.",
     },
     {
       questionId: "q2",
-      text: "Speaker B responds by mentioning sacrifices they've made (giving up billiards) and expressing their assumption that Speaker A would love them.",
+      text: "The officer tries to defuse the situation by asking questions, staying calm, and eventually instructing the suspect to let go of the wire slowly.",
     },
   ],
   dialogueSegments: [
     {
       id: "segment1",
       speakerName: "Speaker A",
-      text: "It's no use, Joe. Joe, we've got to have it",
-      startTime: 0.06,
-      endTime: 2.399,
-      vocabularyItems: [
-        {
-          word: "no use",
-          definition: "Not helpful or effective; pointless",
-          exampleSentence: "It's no use trying to persuade him.",
-          translation: "inútil",
-        },
-      ],
+      text: "Hi, how are you?",
+      startTime: 0,
+      endTime: 2,
+      vocabularyItems: [],
     },
     {
       id: "segment2",
-      speakerName: "Speaker A",
-      text: "out. I've loved you ever since I've known",
-      startTime: 2.399,
-      endTime: 4.5,
-      vocabularyItems: [
-        {
-          word: "have it out",
-          definition:
-            "To discuss or argue about a disagreement until it is resolved",
-          exampleSentence:
-            "We need to have it out and clear the air between us.",
-          translation: "resolver un asunto",
-        },
-      ],
+      speakerName: "Speaker B",
+      text: "I'm fine, sir. What do you want?",
+      startTime: 2,
+      endTime: 4,
+      vocabularyItems: [],
     },
     {
       id: "segment3",
       speakerName: "Speaker A",
-      text: "you, Joe. I couldn't help it, and and I",
-      startTime: 4.5,
-      endTime: 6.6,
-      vocabularyItems: [
-        {
-          word: "ever since",
-          definition: "From a particular time in the past until now",
-          exampleSentence: "I've been waiting for you ever since you left.",
-          translation: "desde que",
-        },
-      ],
+      text: "Could I have a glass of water?",
+      startTime: 4,
+      endTime: 6,
+      vocabularyItems: [],
     },
     {
       id: "segment4",
-      speakerName: "Speaker A",
-      text: "tried to show, and you wouldn't let me",
-      startTime: 6.6,
-      endTime: 7.799,
-      vocabularyItems: [
-        {
-          word: "couldn't help it",
-          definition: "Unable to prevent or control something",
-          exampleSentence: "I couldn't help laughing at his joke.",
-          translation: "no pude evitarlo",
-        },
-      ],
+      speakerName: "Speaker B",
+      text: "Are you a cop too?",
+      startTime: 6,
+      endTime: 8,
+      vocabularyItems: [],
     },
     {
       id: "segment5",
       speakerName: "Speaker A",
-      text: "which is fine, but I must make you hear me",
-      startTime: 7.799,
-      endTime: 9.9,
+      text: "Yeah, that's my partner outside conducting a lawful search. You just need to relax, Harper.",
+      startTime: 8,
+      endTime: 12,
       vocabularyItems: [
         {
-          word: "make you hear",
-          definition: "To force someone to listen and understand",
-          exampleSentence: "I need to make you hear my side of the story.",
-          translation: "hacer que escuches",
+          word: "lawful search",
+          definition:
+            "A search conducted by police with proper legal authorization",
+          exampleSentence:
+            "The officers performed a lawful search of the premises.",
         },
       ],
     },
     {
       id: "segment6",
-      speakerName: "Speaker A",
-      text: "now and give me an answer because I",
-      startTime: 9.9,
-      endTime: 12.0,
-      vocabularyItems: [
-        {
-          word: "give me an answer",
-          definition: "To provide a response to a question or request",
-          exampleSentence: "I need you to give me an answer by tomorrow.",
-          translation: "dame una respuesta",
-        },
-      ],
+      speakerName: "Speaker B",
+      text: "He's running—hands where I can see them!",
+      startTime: 12,
+      endTime: 14,
+      vocabularyItems: [],
     },
     {
       id: "segment7",
       speakerName: "Speaker A",
-      text: "cannot go on like this any longer. Even",
-      startTime: 12.0,
-      endTime: 14.16,
-      vocabularyItems: [
-        {
-          word: "go on like this",
-          definition: "To continue in the current situation or behavior",
-          exampleSentence: "We can't go on like this, working 16 hours a day.",
-          translation: "seguir así",
-        },
-      ],
+      text: "What the hell was that?",
+      startTime: 14,
+      endTime: 16,
+      vocabularyItems: [],
     },
     {
       id: "segment8",
-      speakerName: "Speaker A",
-      text: "Billiards, I gave up everything you",
-      startTime: 14.16,
-      endTime: 15.599,
+      speakerName: "Speaker B",
+      text: "It's the burglar alarm system. There are pressure plates all throughout the floor, rigged to IEDs. One wrong step, and they'll be cleaning you off the ceiling with a squeegee.",
+      startTime: 16,
+      endTime: 22,
       vocabularyItems: [
         {
-          word: "gave up",
-          definition: "To stop doing or having something",
-          exampleSentence: "She gave up smoking last year.",
-          translation: "renuncié a",
+          word: "pressure plates",
+          definition: "Devices that activate when stepped on or pressed",
+          exampleSentence:
+            "The trap was triggered by a pressure plate hidden under the floorboards.",
+        },
+        {
+          word: "IEDs",
+          definition: "Improvised Explosive Devices; homemade bombs",
+          exampleSentence:
+            "The soldiers were trained to identify and avoid IEDs.",
+        },
+        {
+          word: "squeegee",
+          definition:
+            "A tool with a rubber blade for removing liquid from a surface",
+          exampleSentence: "He used a squeegee to clean the shower glass.",
         },
       ],
     },
     {
       id: "segment9",
       speakerName: "Speaker A",
-      text: "didn't like. I'm happy I did, it's fine and I waited, and I never complained",
-      startTime: 15.599,
-      endTime: 19.5,
-      vocabularyItems: [
-        {
-          word: "I'm happy I did",
-          definition: "Expressing satisfaction with a past decision",
-          exampleSentence: "I'm happy I decided to come to the party.",
-          translation: "Me alegro de haberlo hecho",
-        },
-      ],
+      text: "You don't need to do this.",
+      startTime: 22,
+      endTime: 24,
+      vocabularyItems: [],
     },
     {
       id: "segment10",
-      speakerName: "Speaker A",
-      text: "because I",
-      startTime: 19.5,
-      endTime: 22.02,
+      speakerName: "Speaker B",
+      text: "Why not? I'm caught. Might as well go out with a bang.",
+      startTime: 24,
+      endTime: 27,
       vocabularyItems: [
         {
-          word: "complained",
-          definition: "Expressed dissatisfaction or annoyance",
+          word: "go out with a bang",
+          definition: "To end something in a dramatic or spectacular way",
           exampleSentence:
-            "He complained about the poor service at the restaurant.",
-          translation: "me quejé",
+            "After 30 years in business, they decided to go out with a bang by throwing a huge farewell party.",
         },
       ],
     },
     {
       id: "segment11",
       speakerName: "Speaker A",
-      text: "you know, I figured you'd love me, Joe.",
-      startTime: 22.02,
-      endTime: 25.0,
+      text: "How long ago did you rig the house?",
+      startTime: 27,
+      endTime: 30,
       vocabularyItems: [
         {
-          word: "figured",
-          definition: "Believed or assumed something",
-          exampleSentence: "I figured you would be late as usual.",
-          translation: "supuse",
+          word: "rig",
+          definition:
+            "To set up or arrange something, often in a way that's meant to deceive or for a specific purpose",
+          exampleSentence:
+            "He rigged the door to make a sound when someone entered.",
         },
       ],
+    },
+    {
+      id: "segment12",
+      speakerName: "Speaker B",
+      text: "Almost a decade. I've been waiting that long for a cop to show up on my doorstep.",
+      startTime: 30,
+      endTime: 34,
+      vocabularyItems: [
+        {
+          word: "doorstep",
+          definition: "The step at the entrance to a building",
+          exampleSentence: "She left the package on the doorstep.",
+        },
+      ],
+    },
+    {
+      id: "segment13",
+      speakerName: "Speaker A",
+      text: "Let go of the wire—slowly. Turn around, hands behind your back.",
+      startTime: 34,
+      endTime: 38,
+      vocabularyItems: [],
     },
   ],
 };

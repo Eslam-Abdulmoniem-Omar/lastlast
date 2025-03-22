@@ -258,3 +258,62 @@ export async function submitSpeakingAnswer(
     throw error;
   }
 }
+
+// Function to save a video to user's collection
+export async function saveVideoToCollection(
+  userId: string,
+  videoData: Partial<Podcast>
+) {
+  try {
+    // Add current timestamp and user reference
+    const dataToSave = {
+      ...videoData,
+      publishedDate: videoData.publishedDate || new Date().toISOString(),
+      createdBy: userId,
+      createdAt: serverTimestamp(),
+      isShort: true, // Mark as short video
+      saved: true, // Mark as saved to collection
+    };
+
+    // Determine video source
+    if (videoData.tiktokUrl && !videoData.videoSource) {
+      dataToSave.videoSource = "tiktok";
+    } else if (videoData.youtubeUrl && !videoData.videoSource) {
+      dataToSave.videoSource = "youtube";
+    }
+
+    // Add to user's saved videos collection
+    const docRef = await addDoc(collection(db, "savedVideos"), dataToSave);
+
+    console.log(`Saved video to collection with ID: ${docRef.id}`);
+
+    return {
+      id: docRef.id,
+      ...dataToSave,
+    } as Podcast;
+  } catch (error) {
+    console.error("Error saving video to collection:", error);
+    throw error;
+  }
+}
+
+// Function to get user's saved videos
+export async function getUserSavedVideos(userId: string, limitCount = 50) {
+  try {
+    const q = query(
+      collection(db, "savedVideos"),
+      where("createdBy", "==", userId),
+      orderBy("createdAt", "desc"),
+      limit(limitCount)
+    );
+
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Podcast[];
+  } catch (error) {
+    console.error("Error getting saved videos:", error);
+    throw error;
+  }
+}
