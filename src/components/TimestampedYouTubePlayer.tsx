@@ -728,7 +728,7 @@ export default function TimestampedYouTubePlayer({
   };
 
   return (
-    <div className="yt-player-wrapper bg-[#0c1527] text-white rounded-lg overflow-hidden shadow-lg mb-4 h-[650px]">
+    <div className="yt-player-wrapper bg-[#0c1527] text-white rounded-lg overflow-hidden shadow-lg mb-4 h-[100%]  md:h-[650px]">
       <style jsx global>{`
         /* Animations for word highlighting and popups */
         @keyframes fadeIn {
@@ -841,7 +841,7 @@ export default function TimestampedYouTubePlayer({
             src={`https://www.youtube.com/embed/${extractVideoId(
               podcast.youtubeUrl
             )}`}
-            className="absolute inset-0 w-full h-[50%] z-5"
+            className="absolute inset-0 w-full h-[100%] md:h-[50%] z-5"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             id="youtube-player-iframe"
             allowFullScreen
