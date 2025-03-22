@@ -9,6 +9,9 @@ export const metadata: Metadata = {
 // Add dynamic export to prevent static prerendering
 export const dynamic = "force-dynamic";
 
+// Import the client component
+import ClientSpeakingPractice from "./ClientSpeakingPractice";
+
 export default function PracticePage() {
   return (
     <div className="container mx-auto px-4 py-8">
@@ -22,7 +25,7 @@ export default function PracticePage() {
             attention to contractions and pronunciation.
           </p>
 
-          {/* Import the client component dynamically */}
+          {/* Import the client component */}
           <ClientSpeakingPractice />
         </div>
 
@@ -37,33 +40,5 @@ export default function PracticePage() {
         </div>
       </div>
     </div>
-  );
-}
-
-// Create a client component wrapper
-("use client");
-
-import React from "react";
-import GuidedSpeakingPractice from "../../components/GuidedSpeakingPractice";
-
-function ClientSpeakingPractice() {
-  // Example script - you can make this dynamic based on your needs
-  const script = "I've loved you";
-
-  // Create a dialogueLines array as expected by the component
-  const dialogueLines = [
-    {
-      text: script,
-      speaker: "You",
-      startTime: 0,
-      endTime: 0,
-    },
-  ];
-
-  return (
-    <GuidedSpeakingPractice
-      dialogueLines={dialogueLines}
-      simpleFeedback={true}
-    />
   );
 }
