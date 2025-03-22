@@ -11,6 +11,16 @@ export default function PracticePage() {
     console.log("Received transcript:", transcript);
   };
 
+  // Create a dialogueLines array as expected by the component
+  const dialogueLines = [
+    {
+      text: script,
+      speaker: "You",
+      startTime: 0,
+      endTime: 0,
+    },
+  ];
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">Speaking Practice</h1>
@@ -24,8 +34,8 @@ export default function PracticePage() {
           </p>
 
           <GuidedSpeakingPractice
-            expectedScript={script}
-            onTranscriptReceived={handleTranscriptReceived}
+            dialogueLines={dialogueLines}
+            simpleFeedback={true}
           />
         </div>
 

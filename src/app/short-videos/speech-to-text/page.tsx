@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import {
   Mic,
   StopCircle,
@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { toast } from "react-hot-toast";
 import { useSearchParams } from "next/navigation";
+import LoadingDots from "@/components/ui/loading-dots";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -46,7 +47,7 @@ interface LinePerformance {
   emotion: "neutral" | "good" | "needs-improvement";
 }
 
-export default function SpeechToTextPage() {
+function SpeechToTextContent() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
@@ -1990,5 +1991,19 @@ We'll now begin the scene. Your first line will be highlighted below.`,
 
       <AudioPlayingIndicator />
     </div>
+  );
+}
+
+export default function SpeechToTextPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <LoadingDots />
+        </div>
+      }
+    >
+      <SpeechToTextContent />
+    </Suspense>
   );
 }
