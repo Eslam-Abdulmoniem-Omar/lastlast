@@ -1,0 +1,1304 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import {
+  Mic,
+  StopCircle,
+  ArrowLeft,
+  User,
+  Bot,
+  RefreshCw,
+  FileText,
+  Film,
+  MessageSquare,
+  HelpCircle,
+  AlertCircle,
+  ThumbsUp,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import Link from "next/link";
+import { toast } from "react-hot-toast";
+
+interface Message {
+  role: "user" | "assistant" | "system";
+  content: string;
+  isCorrect?: boolean;
+  emotion?: "neutral" | "good" | "needs-improvement";
+  audio?: string;
+  isPlaying?: boolean;
+}
+
+interface TranscriptLine {
+  speaker: "A" | "B";
+  text: string;
+}
+
+interface Feedback {
+  scriptAccuracy: boolean;
+  emotionalTone: "neutral" | "good" | "needs-improvement";
+  message: string;
+}
+
+interface LinePerformance {
+  expectedText: string;
+  actualText: string;
+  isCorrect: boolean;
+  emotion: "neutral" | "good" | "needs-improvement";
+}
+
+export default function SpeechToTextPage() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
+  const [transcription, setTranscription] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentLineIndex, setCurrentLineIndex] = useState(0);
+  const [userSpeaker, setUserSpeaker] = useState<"A" | "B">("A");
+  const [pendingFeedback, setPendingFeedback] = useState<Feedback | null>(null);
+  const [exchangeCount, setExchangeCount] = useState(0);
+  const [highlightedText, setHighlightedText] = useState("");
+  const [linePerformances, setLinePerformances] = useState<LinePerformance[]>(
+    []
+  );
+  const [isScriptComplete, setIsScriptComplete] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [voiceGender, setVoiceGender] = useState<"FEMALE" | "MALE">("FEMALE");
+  const [audioVolume, setAudioVolume] = useState(0.8);
+  const [autoPlayAudio, setAutoPlayAudio] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Script with Speaker A and B
+  const [transcript, setTranscript] = useState<TranscriptLine[]>([
+    { speaker: "A", text: "Hi, how are you?" },
+    { speaker: "B", text: "Fine, sir." },
+    { speaker: "A", text: "What do you want?" },
+    { speaker: "B", text: "You a cop too?" },
+    {
+      speaker: "A",
+      text: "Uh, yeah. That's my partner outside conducting a lawful search.",
+    },
+    { speaker: "A", text: "So you just need to relax." },
+    { speaker: "B", text: "Harper, he's running!" },
+  ]);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
+
+  // Add initial instruction message
+  useEffect(() => {
+    // Add welcome message
+    if (messages.length === 0) {
+      const otherSpeaker = userSpeaker === "A" ? "B" : "A";
+
+      setMessages([
+        {
+          role: "system",
+          content: `Welcome to script practice! You'll be playing Speaker ${userSpeaker}.
+
+The AI will play Speaker ${otherSpeaker}.
+
+We'll now begin the scene. Your first line will be highlighted below.`,
+        },
+      ]);
+
+      // Find the first line for the user's speaker
+      let firstUserLineIndex = transcript.findIndex(
+        (line) => line.speaker === userSpeaker
+      );
+      if (firstUserLineIndex > 0) {
+        // If there are lines before the user's first line, add them as assistant messages
+        for (let i = 0; i < firstUserLineIndex; i++) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: transcript[i].text,
+            },
+          ]);
+        }
+      }
+
+      // Highlight the user's first line
+      if (firstUserLineIndex >= 0) {
+        setCurrentLineIndex(firstUserLineIndex);
+        setHighlightedText(transcript[firstUserLineIndex].text);
+      }
+    }
+  }, [userSpeaker]);
+
+  // Auto-scroll to bottom of conversation when new messages are added
+  useEffect(() => {
+    if (conversationEndRef.current) {
+      conversationEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // Initialize audio element
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      audioRef.current = new Audio();
+      audioRef.current.onended = () => {
+        setIsPlayingAudio(false);
+        setMessages(prev => 
+          prev.map(msg => ({ ...msg, isPlaying: false }))
+        );
+      };
+      audioRef.current.volume = audioVolume;
+    }
+    
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update audio volume when changed
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = audioVolume;
+    }
+  }, [audioVolume]);
+
+  const startRecording = async () => {
+    try {
+      // Reset states
+      setTranscription("");
+      setErrorMessage(null);
+      audioChunksRef.current = [];
+
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      mediaStreamRef.current = stream;
+
+      // Set up MediaRecorder
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      // Handle data available event
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      // Handle recording stop event
+      recorder.onstop = async () => {
+        setIsProcessing(true);
+
+        try {
+          // Create audio blob from chunks
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: mimeType,
+          });
+
+          await processAudio(audioBlob);
+        } catch (error) {
+          console.error("Error processing audio:", error);
+          setErrorMessage("Failed to process audio. Please try again.");
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      // Start recording
+      recorder.start(1000);
+      setIsRecording(true);
+      toast.success("Recording started");
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      setErrorMessage(
+        "Could not access microphone. Please check your browser permissions."
+      );
+    }
+  };
+
+  const stopRecording = () => {
+    if (isRecording) {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
+
+      setIsRecording(false);
+      toast.success("Recording stopped");
+    }
+  };
+
+  const processAudio = async (audioBlob: Blob) => {
+    try {
+      // Create form data
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
+
+      // Send to Google Cloud Speech-to-Text API
+      const response = await fetch("/api/google-speech/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to transcribe speech");
+      }
+
+      if (result.success) {
+        const transcribedText = result.transcript;
+        setTranscription(transcribedText);
+
+        // Evaluate user's speech
+        await processUserSpeech(transcribedText);
+      } else {
+        setErrorMessage(result.error || "No speech detected");
+      }
+    } catch (error: any) {
+      console.error("Error in speech recognition:", error);
+      setErrorMessage(error.message || "Failed to transcribe speech");
+    }
+  };
+
+  const processUserSpeech = async (userMessage: string) => {
+    setIsGeneratingResponse(true);
+    try {
+      // Check if it's user's turn
+      if (transcript[currentLineIndex].speaker !== userSpeaker) {
+        setErrorMessage("It's not your turn to speak now.");
+        setIsGeneratingResponse(false);
+        return;
+      }
+
+      // Get the current expected line
+      const expectedLine = transcript[currentLineIndex].text;
+
+      // Check if user message is similar to expected line
+      const isCorrect = isSimilarText(userMessage, expectedLine);
+      const emotionRating = detectEmotion(userMessage);
+
+      // Record the user's performance for this line
+      setLinePerformances((prev) => [
+        ...prev,
+        {
+          expectedText: expectedLine,
+          actualText: userMessage,
+          isCorrect,
+          emotion: emotionRating,
+        },
+      ]);
+
+      // Add user message to conversation with correctness flag
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "user",
+          content: userMessage,
+          isCorrect: isCorrect,
+          emotion: emotionRating,
+        },
+      ]);
+
+      // Increment exchange count
+      const newExchangeCount = exchangeCount + 1;
+      setExchangeCount(newExchangeCount);
+
+      // Store feedback for later
+      setPendingFeedback({
+        scriptAccuracy: isCorrect,
+        emotionalTone: emotionRating,
+        message: generateFeedbackMessage(isCorrect, emotionRating),
+      });
+
+      // Move to next line regardless of correctness to keep the flow
+      const nextIndex = currentLineIndex + 1;
+      setCurrentLineIndex(nextIndex);
+
+      // Now respond as the other character if there are more lines
+      if (nextIndex < transcript.length) {
+        // If the next speaker is the AI (not the user)
+        if (transcript[nextIndex].speaker !== userSpeaker) {
+          // Pause briefly before AI responds (seems more natural)
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          
+          const aiText = transcript[nextIndex].text;
+          
+          // Generate audio for AI response
+          const audioContent = await convertTextToSpeech(aiText);
+          
+          // Add AI's line with audio content
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: aiText,
+              audio: audioContent || undefined,
+            },
+          ]);
+          
+          // Auto-play AI response if enabled
+          if (autoPlayAudio && audioContent) {
+            setTimeout(() => {
+              const newIndex = messages.length;
+              playAudio(audioContent, newIndex);
+            }, 500);
+          }
+
+          // Move to the next line after AI's response
+          const userNextIndex = nextIndex + 1;
+          setCurrentLineIndex(userNextIndex);
+
+          // Update highlighted text if there's another user line
+          if (userNextIndex < transcript.length) {
+            setHighlightedText(transcript[userNextIndex].text);
+          } else {
+            setHighlightedText("");
+            setIsScriptComplete(true);
+          }
+        } else {
+          // Next line is user's - highlight it
+          setHighlightedText(transcript[nextIndex].text);
+        }
+      } else {
+        // End of script
+        setHighlightedText("");
+        setIsScriptComplete(true);
+
+        // Add end of scene message
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: "🎭 End of scene! Great job practicing this dialogue.",
+          },
+        ]);
+
+        // Generate and display the final performance summary with delay
+        setTimeout(() => {
+          generatePerformanceSummary();
+        }, 2000);
+      }
+
+      // Give feedback after every other exchange (user->AI->user)
+      if (newExchangeCount % 2 === 0 && pendingFeedback) {
+        // Pause before showing feedback
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: pendingFeedback.message,
+          },
+        ]);
+
+        setPendingFeedback(null);
+      }
+    } catch (error: any) {
+      console.error("Error processing speech:", error);
+      toast.error("Failed to process response");
+    } finally {
+      setIsGeneratingResponse(false);
+    }
+  };
+
+  // Generate a summary of the user's performance for all their lines
+  const generatePerformanceSummary = async () => {
+    // Only include lines that belong to the user's character
+    const userLines = transcript.filter((line) => line.speaker === userSpeaker);
+
+    // Pause before showing the summary
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // If no performance data, create placeholder data
+    if (linePerformances.length === 0 || userLines.length === 0) {
+      const noDataMessage = "No performance data recorded. Please try again.";
+
+      // Filter out any existing performance summary messages
+      setMessages((prev) => {
+        const filteredMessages = prev.filter(
+          (msg) =>
+            !(
+              msg.role === "system" &&
+              msg.content.includes("performance_summary")
+            )
+        );
+
+        return [
+          ...filteredMessages,
+          {
+            role: "system",
+            content: noDataMessage,
+          },
+        ];
+      });
+      return;
+    }
+
+    // Calculate overall statistics
+    const correctLines = linePerformances.filter(
+      (perf) => perf.isCorrect
+    ).length;
+    const goodEmotionLines = linePerformances.filter(
+      (perf) => perf.emotion === "good"
+    ).length;
+
+    const accuracyPercentage = Math.round(
+      (correctLines / linePerformances.length) * 100
+    );
+    const emotionPercentage = Math.round(
+      (goodEmotionLines / linePerformances.length) * 100
+    );
+
+    // Create individual feedback items for better rendering
+    const feedbackItems = linePerformances.map((perf, index) => {
+      // Keep line reference short
+      const shortLine =
+        perf.expectedText.length > 30
+          ? perf.expectedText.substring(0, 30) + "..."
+          : perf.expectedText;
+
+      return {
+        line: `${index + 1}. "${shortLine}"`,
+        scriptAccuracy: {
+          isCorrect: perf.isCorrect,
+          message: perf.isCorrect
+            ? "Good match!"
+            : "Could be closer to original.",
+        },
+        emotion: {
+          rating: perf.emotion,
+          message:
+            perf.emotion === "good"
+              ? "Excellent expression!"
+              : perf.emotion === "needs-improvement"
+              ? "Could use more emotion."
+              : "Decent delivery.",
+        },
+      };
+    });
+
+    // Filter out any existing performance summary messages first
+    setMessages((prev) => {
+      const filteredMessages = prev.filter(
+        (msg) =>
+          !(
+            msg.role === "system" &&
+            typeof msg.content === "string" &&
+            msg.content.startsWith("{") &&
+            msg.content.includes("performance_summary")
+          )
+      );
+
+      // Then add the new performance summary
+      return [
+        ...filteredMessages,
+        {
+          role: "system",
+          content: JSON.stringify({
+            type: "performance_summary",
+            accuracyPercentage,
+            emotionPercentage,
+            feedbackItems,
+          }),
+        },
+      ];
+    });
+
+    // Auto-scroll to ensure feedback is visible
+    if (conversationEndRef.current) {
+      setTimeout(() => {
+        conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  };
+
+  // Detects emotional expression in speech
+  const detectEmotion = (
+    text: string
+  ): "neutral" | "good" | "needs-improvement" => {
+    // This is a simple simulation - in a real app, this could use
+    // sentiment analysis, punctuation analysis, etc.
+
+    // Check for exclamation marks, question marks, ellipses which might indicate emotion
+    const hasEmotionPunctuation = /[!?...]/.test(text);
+
+    // Check for emotional words or phrases
+    const emotionalPhrases = [
+      "love",
+      "hate",
+      "please",
+      "must",
+      "cannot",
+      "never",
+      "happy",
+      "fine",
+      "answer",
+      "help",
+    ];
+
+    const wordCount = text
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((word) =>
+        emotionalPhrases.some((phrase) => word.includes(phrase))
+      ).length;
+
+    // Simple heuristic - could be replaced with ML model in production
+    if (wordCount >= 2 || hasEmotionPunctuation) {
+      return "good";
+    } else if (wordCount >= 1) {
+      return "neutral";
+    } else {
+      return "needs-improvement";
+    }
+  };
+
+  // Generate feedback message based on script accuracy and emotion
+  const generateFeedbackMessage = (
+    isCorrect: boolean,
+    emotion: "neutral" | "good" | "needs-improvement"
+  ): string => {
+    let message = "";
+
+    // Script accuracy feedback
+    if (!isCorrect) {
+      message += "🔄 Try to stay closer to the script. ";
+    } else {
+      message += "✅ Great job following the script! ";
+    }
+
+    // Emotional tone feedback
+    if (emotion === "needs-improvement") {
+      message += "😐 Try adding more emotion to your delivery.";
+    } else if (emotion === "good") {
+      message += "👏 Your emotional expression was excellent!";
+    } else {
+      message += "You're doing well, keep practicing.";
+    }
+
+    return message;
+  };
+
+  // Helper function to compare text similarity
+  const isSimilarText = (text1: string, text2: string): boolean => {
+    // Normalize both texts for comparison
+    const normalize = (text: string) =>
+      text
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s]/g, "");
+    const normalizedText1 = normalize(text1);
+    const normalizedText2 = normalize(text2);
+
+    // Calculate word overlap (simple approximation)
+    const words1 = normalizedText1.split(/\s+/);
+    const words2 = normalizedText2.split(/\s+/);
+
+    // Count common words
+    const commonWords = words1.filter((word) => words2.includes(word));
+
+    // Calculate similarity score
+    const similarityScore =
+      commonWords.length / Math.max(words1.length, words2.length);
+
+    // Consider similar if the score is above a threshold (e.g., 0.3 or 30%)
+    return similarityScore > 0.35;
+  };
+
+  const clearConversation = () => {
+    setMessages([]);
+    setTranscription("");
+    setCurrentLineIndex(0);
+    setExchangeCount(0);
+    setPendingFeedback(null);
+    setHighlightedText("");
+    setLinePerformances([]);
+    setIsScriptComplete(false);
+  };
+
+  const resetConversation = () => {
+    if (confirm("Are you sure you want to reset the conversation?")) {
+      clearConversation();
+      toast.success("Script practice has been reset");
+
+      // Re-initialize the conversation
+      const otherSpeaker = userSpeaker === "A" ? "B" : "A";
+
+      setMessages([
+        {
+          role: "system",
+          content: `Welcome to script practice! You'll be playing Speaker ${userSpeaker}.
+
+The AI will play Speaker ${otherSpeaker}.
+
+We'll now begin the scene. Your first line will be highlighted below.`,
+        },
+      ]);
+
+      // Find the first line for the user's speaker
+      let firstUserLineIndex = transcript.findIndex(
+        (line) => line.speaker === userSpeaker
+      );
+      if (firstUserLineIndex > 0) {
+        // If there are lines before the user's first line, add them as assistant messages
+        for (let i = 0; i < firstUserLineIndex; i++) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: transcript[i].text,
+            },
+          ]);
+        }
+      }
+
+      // Set current line to user's first line
+      if (firstUserLineIndex >= 0) {
+        setCurrentLineIndex(firstUserLineIndex);
+        setHighlightedText(transcript[firstUserLineIndex].text);
+      }
+    }
+  };
+
+  const switchSpeaker = (speaker: "A" | "B") => {
+    if (speaker !== userSpeaker) {
+      setUserSpeaker(speaker);
+      clearConversation();
+      toast.success(`Switched to Speaker ${speaker}`);
+    }
+  };
+
+  const getHelpWithLine = () => {
+    const currentLineIdx =
+      currentLineIndex >= transcript.length
+        ? transcript.length - 1
+        : currentLineIndex;
+
+    if (
+      currentLineIdx >= 0 &&
+      transcript[currentLineIdx].speaker === userSpeaker
+    ) {
+      const currentLine = transcript[currentLineIdx].text;
+      const helpMessage = `💡 Here's a hint: Try breaking the line into smaller chunks:
+      
+"${currentLine.split(" ").slice(0, 3).join(" ")}..."
+"...${currentLine.split(" ").slice(3, 6).join(" ")}..."
+
+Take a deep breath and try again!`;
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "system", content: helpMessage },
+      ]);
+
+      // Auto-scroll
+      if (conversationEndRef.current) {
+        setTimeout(() => {
+          conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      }
+    }
+  };
+
+  // Text to speech conversion
+  const convertTextToSpeech = async (text: string): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/google-speech/text-to-speech", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          voiceGender,
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to convert text to speech");
+      }
+      
+      if (result.success) {
+        return result.audioContent;
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.error("Error in text-to-speech:", error);
+      return null;
+    }
+  };
+  
+  // Play audio
+  const playAudio = (base64Audio: string, messageIndex: number) => {
+    if (audioRef.current) {
+      // Stop any currently playing audio
+      audioRef.current.pause();
+      
+      // Update UI to show which message is playing
+      setMessages(prev => 
+        prev.map((msg, idx) => ({
+          ...msg,
+          isPlaying: idx === messageIndex
+        }))
+      );
+      
+      // Convert base64 to blob URL
+      const binaryString = window.atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'audio/mp3' });
+      const url = URL.createObjectURL(blob);
+      
+      // Play the audio
+      audioRef.current.src = url;
+      audioRef.current.play().catch(e => {
+        console.error("Failed to play audio:", e);
+        setIsPlayingAudio(false);
+      });
+      
+      setIsPlayingAudio(true);
+      
+      // Clean up blob URL when audio ends
+      audioRef.current.onended = () => {
+        URL.revokeObjectURL(url);
+        setIsPlayingAudio(false);
+        setMessages(prev => 
+          prev.map(msg => ({ ...msg, isPlaying: false }))
+        );
+      };
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white">
+      <div className="container mx-auto px-4 pt-28 pb-12 mt-16">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-8 flex items-center justify-between">
+            <div className="flex items-center">
+              <Link
+                href="/short-videos"
+                className="mr-4 p-2 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                <ArrowLeft size={20} />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  Script Practice
+                </h1>
+                <p className="text-gray-600">
+                  Practice a dialogue script with AI roleplay and feedback
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                <button
+                  onClick={() => switchSpeaker("A")}
+                  className={`px-3 py-2 text-sm ${
+                    userSpeaker === "A"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  Speaker A
+                </button>
+                <button
+                  onClick={() => switchSpeaker("B")}
+                  className={`px-3 py-2 text-sm ${
+                    userSpeaker === "B"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  Speaker B
+                </button>
+              </div>
+
+              <button
+                onClick={resetConversation}
+                className="flex items-center gap-1 px-3 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <RefreshCw size={16} />
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              <p className="font-medium">Error</p>
+              <p>{errorMessage}</p>
+            </div>
+          )}
+
+          {/* Script progress indicator */}
+          <div className="mb-6 p-4 bg-white rounded-lg shadow-md">
+            <div className="flex items-center gap-3 mb-3">
+              <Film size={20} className="text-blue-600" />
+              <h3 className="text-lg font-semibold">Script Progress</h3>
+            </div>
+
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-3">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full"
+                style={{
+                  width: `${(currentLineIndex / transcript.length) * 100}%`,
+                }}
+              ></div>
+            </div>
+
+            <p className="text-sm text-gray-600">
+              Line {Math.min(currentLineIndex + 1, transcript.length)} of{" "}
+              {transcript.length}
+            </p>
+
+            {/* Highlighted current line */}
+            {highlightedText && (
+              <div className="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-lg">
+                <p className="font-medium text-yellow-800 mb-1">Your Line:</p>
+                <p className="text-yellow-900 font-medium">{highlightedText}</p>
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end">
+              {highlightedText && (
+                <button
+                  onClick={getHelpWithLine}
+                  className="flex items-center gap-1 p-2 bg-amber-100 rounded-lg text-amber-700 hover:bg-amber-200"
+                  title="Get help with this line"
+                >
+                  <HelpCircle size={16} />
+                  <span className="text-sm">Help</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Audio settings panel */}
+          <div className="mb-6 p-4 bg-white rounded-lg shadow-md">
+            <div className="flex items-center gap-3 mb-3">
+              <Volume2 size={20} className="text-blue-600" />
+              <h3 className="text-lg font-semibold">Audio Settings</h3>
+            </div>
+            
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center">
+                <span className="mr-2 text-sm text-gray-700">Voice:</span>
+                <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                  <button
+                    onClick={() => setVoiceGender("FEMALE")}
+                    className={`px-3 py-1 text-sm ${
+                      voiceGender === "FEMALE"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Female
+                  </button>
+                  <button
+                    onClick={() => setVoiceGender("MALE")}
+                    className={`px-3 py-1 text-sm ${
+                      voiceGender === "MALE"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Male
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex items-center">
+                <span className="mr-2 text-sm text-gray-700">Volume:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={audioVolume}
+                  onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
+                  className="w-24"
+                />
+                <button
+                  onClick={() => setAudioVolume(audioVolume > 0 ? 0 : 0.8)}
+                  className="ml-2 p-1 rounded-full hover:bg-gray-200"
+                >
+                  {audioVolume > 0 ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                </button>
+              </div>
+              
+              <div className="flex items-center">
+                <label className="inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoPlayAudio}
+                    onChange={() => setAutoPlayAudio(!autoPlayAudio)}
+                    className="sr-only peer"
+                  />
+                  <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ms-3 text-sm font-medium text-gray-700">Auto-play AI voice</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Messages display section - ENHANCED FOR REAL-TIME CONVERSATION UI */}
+          <div className="mb-8 p-6 bg-white rounded-lg shadow-md max-h-[500px] overflow-y-auto">
+            <div className="space-y-4">
+              {messages.map((message, index) => {
+                // Check if this is a performance summary message
+                if (
+                  message.role === "system" &&
+                  message.content.startsWith("{") &&
+                  message.content.includes("performance_summary")
+                ) {
+                  try {
+                    const feedbackData = JSON.parse(message.content);
+                    if (feedbackData.type === "performance_summary") {
+                      return (
+                        <div key={index} className="flex justify-center">
+                          <div className="w-full bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4 shadow-md">
+                            <div className="text-center mb-4">
+                              <h3 className="text-xl font-bold text-blue-800">
+                                Your Performance Summary
+                              </h3>
+                            </div>
+
+                            <div className="flex flex-col md:flex-row gap-4 mb-4">
+                              <div className="flex-1 bg-white p-3 rounded-lg shadow-sm">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                      feedbackData.accuracyPercentage >= 70
+                                        ? "bg-green-100 text-green-600"
+                                        : feedbackData.accuracyPercentage >= 40
+                                        ? "bg-yellow-100 text-yellow-600"
+                                        : "bg-red-100 text-red-600"
+                                    }`}
+                                  >
+                                    <span className="text-lg font-bold">
+                                      {feedbackData.accuracyPercentage}%
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <h4 className="font-semibold text-gray-700">
+                                      Script Accuracy
+                                    </h4>
+                                    <p className="text-sm text-gray-500">
+                                      How well you matched the script
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex-1 bg-white p-3 rounded-lg shadow-sm">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                      feedbackData.emotionPercentage >= 70
+                                        ? "bg-green-100 text-green-600"
+                                        : feedbackData.emotionPercentage >= 40
+                                        ? "bg-yellow-100 text-yellow-600"
+                                        : "bg-red-100 text-red-600"
+                                    }`}
+                                  >
+                                    <span className="text-lg font-bold">
+                                      {feedbackData.emotionPercentage}%
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <h4 className="font-semibold text-gray-700">
+                                      Emotional Expression
+                                    </h4>
+                                    <p className="text-sm text-gray-500">
+                                      How well you conveyed emotion
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-lg shadow-sm">
+                              <h4 className="font-semibold text-gray-700 mb-3">
+                                Line-by-Line Feedback
+                              </h4>
+
+                              <div className="space-y-3">
+                                {feedbackData.feedbackItems.map((item, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="border-b border-gray-100 pb-3 last:border-b-0"
+                                  >
+                                    <p className="font-medium text-gray-800">
+                                      {item.line}
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                                      <div className="flex items-center gap-1">
+                                        <span
+                                          className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                                            item.scriptAccuracy.isCorrect
+                                              ? "bg-green-100"
+                                              : "bg-amber-100"
+                                          }`}
+                                        >
+                                          {item.scriptAccuracy.isCorrect ? (
+                                            <span className="text-green-600 text-xs">
+                                              ✓
+                                            </span>
+                                          ) : (
+                                            <span className="text-amber-600 text-xs">
+                                              ✗
+                                            </span>
+                                          )}
+                                        </span>
+                                        <span className="text-sm text-gray-600">
+                                          {item.scriptAccuracy.message}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 sm:ml-4">
+                                        <span className="text-lg">
+                                          {item.emotion.rating === "good"
+                                            ? "😀"
+                                            : item.emotion.rating ===
+                                              "needs-improvement"
+                                            ? "😐"
+                                            : "🙂"}
+                                        </span>
+                                        <span className="text-sm text-gray-600">
+                                          {item.emotion.message}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                  } catch (e) {
+                    // If parsing fails, render as normal message
+                  }
+                }
+
+                // Regular message rendering for non-feedback messages
+                return (
+                  <div
+                    key={index}
+                    className={`flex ${
+                      message.role === "user"
+                        ? "justify-end"
+                        : message.role === "system"
+                        ? "justify-center"
+                        : "justify-start"
+                    }`}
+                  >
+                    {message.role === "system" ? (
+                      <div className="max-w-[85%] p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                        <p className="text-gray-700">{message.content}</p>
+                      </div>
+                    ) : (
+                      <div
+                        className={`max-w-[75%] p-3 rounded-lg ${
+                          message.role === "user"
+                            ? message.isCorrect === false
+                              ? "bg-blue-400 text-white rounded-br-none"
+                              : "bg-blue-600 text-white rounded-br-none"
+                            : "bg-gray-100 text-gray-800 rounded-bl-none ${message.isPlaying ? 'ring-2 ring-yellow-400' : ''}`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          {message.role === "assistant" ? (
+                            <>
+                              <User size={16} />
+                              <span className="font-semibold">
+                                Speaker {userSpeaker === "A" ? "B" : "A"}
+                              </span>
+                              {message.audio && (
+                                <button 
+                                  onClick={() => playAudio(message.audio!, index)}
+                                  className={`p-1 rounded-full ${message.isPlaying ? 'bg-yellow-100' : 'hover:bg-gray-200'}`}
+                                  title={message.isPlaying ? "Playing audio..." : "Play audio"}
+                                >
+                                  <Volume2 size={14} className={message.isPlaying ? 'text-yellow-600 animate-pulse' : 'text-gray-600'} />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <User size={16} />
+                              <span className="font-semibold">
+                                Speaker {userSpeaker}
+                              </span>
+                              {message.emotion === "good" && (
+                                <ThumbsUp
+                                  size={14}
+                                  className="text-yellow-300"
+                                />
+                              )}
+                              {message.emotion === "needs-improvement" && (
+                                <AlertCircle
+                                  size={14}
+                                  className="text-white opacity-70"
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <p className="whitespace-pre-line">{message.content}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              
+              {/* Typing indicator when AI is generating response */}
+              {isGeneratingResponse && (
+                <div className="flex justify-start">
+                  <div className="max-w-[75%] p-3 bg-gray-100 text-gray-800 rounded-lg rounded-bl-none">
+                    <div className="flex items-center gap-2 mb-1">
+                      <User size={16} />
+                      <span className="font-semibold">
+                        Speaker {userSpeaker === "A" ? "B" : "A"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-100"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-200"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Audio indicator when sound is playing */}
+              {isPlayingAudio && (
+                <div className="flex justify-center">
+                  <div className="py-1 px-3 bg-yellow-100 rounded-full text-yellow-800 text-sm flex items-center gap-1">
+                    <Volume2 size={14} className="animate-pulse" />
+                    <span>Playing audio...</span>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={conversationEndRef} />
+            </div>
+          </div>
+
+          {/* Microphone control section */}
+          <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="w-full flex flex-wrap justify-center gap-3">
+                {!isRecording ? (
+                  <>
+                    <button
+                      onClick={startRecording}
+                      disabled={
+                        isProcessing || isGeneratingResponse || !highlightedText
+                      }
+                      className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Mic size={36} />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={stopRecording}
+                    className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full"
+                  >
+                    <StopCircle size={36} />
+                  </button>
+                )}
+
+                {(isScriptComplete || linePerformances.length > 0) && (
+                  <button
+                    onClick={generatePerformanceSummary}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-1"
+                  >
+                    <ThumbsUp size={18} />
+                    <span>Show My Feedback</span>
+                  </button>
+                )}
+              </div>
+
+              <p className="text-center text-gray-600">
+                {isRecording
+                  ? "Recording... Click stop when finished speaking"
+                  : isProcessing
+                  ? "Processing your speech..."
+                  : isGeneratingResponse
+                  ? "Processing dialogue..."
+                  : highlightedText
+                  ? "Click the microphone button and speak your line"
+                  : isScriptComplete
+                  ? "Script complete! See your performance summary above"
+                  : "Script complete! Reset to practice again"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 p-6 bg-blue-50 rounded-lg">
+            <h3 className="text-xl font-bold text-blue-900 mb-4">
+              How to Use This Feature
+            </h3>
+            <ul className="list-disc pl-5 space-y-2 text-blue-800">
+              <li>Select whether you want to be Speaker A or Speaker B</li>
+              <li>The AI will play the other character in the dialogue</li>
+              <li>
+                Click the microphone button and speak the highlighted line
+              </li>
+              <li>Try to match the script and express appropriate emotion</li>
+              <li>
+                The AI will respond as the other character to keep the dialogue
+                flowing
+              </li>
+              <li>
+                Feedback on your performance will appear after every few
+                exchanges
+              </li>
+              <li>
+                Click the "Help" button if you need assistance with
+                pronunciation
+              </li>
+              <li>
+                Click the speaker icon to hear the AI's voice speaking their lines
+              </li>
+              <li>
+                Adjust voice settings (male/female) and volume in the Audio Settings panel
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}

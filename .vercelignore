@@ -1,0 +1,14 @@
+.git
+.github
+.next
+node_modules
+fixed-backup
+sayFlunetlastversion
+__pycache__
+.vercel
+*.log
+.vscode
+example.py
+youtube_transcript_yt_dlp.py
+youtube_transcript.py
+test_tiktok_api.py 
